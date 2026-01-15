@@ -1,0 +1,524 @@
+#ifndef lex_H
+#define lex_H
+
+/*
+ * ABOUT
+ *
+ * lex.h is a minimal sigle-header lexer library, designed to be fast, and readable.
+ * The library could be entirely stack allocated without needing for heap allocation.
+ *
+ */
+
+#include <stdlib.h>
+#include <stdbool.h>
+
+/// MACROS
+
+#define LEX_VERSION 1
+
+/*
+ * This macro is used to offset the TokenDef.name created by TOKENDEF macro.
+ * You can define this macro if your token's ID has some prefix.
+ *
+ * Ex:
+ *
+ * #define LEX_TOKEN_ID_OFFSET 2
+ * #include "lex.h"
+ *
+ * enum { T_KEYWORD } ExampleTokens;
+ *
+ * ...
+ * TOKENDEF(T_KEYWORD, lexer_rule_here) // The name for this token will be "KEYWORD" instead of "T_KEYWORD"
+ * ...
+ */
+#ifndef LEX_TOKEN_ID_OFFSET
+#define LEX_TOKEN_ID_OFFSET 0
+#endif
+
+/*
+ * You can use this while creating 'rule functions' to indicate non matching cases.
+ */
+#define LEX_NO_MATCH 0
+
+/*
+ * This macros is indent to be called inside a static 'TokenDef' array.
+ * It's expected the parameter 'id' to be an global or local variable, 
+ * where the value will be the index* of the defined token, and the it's 
+ * name will be stored literally as it is, as the name** for this token.
+ *
+ * (*): The index determines the order of execution for the matching, so 
+ * it's recommend to take care about it.
+ *
+ * (**): The name will be stored as string, and if you are prefixing your 
+ * variables names with some sort of namespace, you can strip it out by 
+ * defining LEX_TOKEN_ID_OFFSET to the size of your prefix.
+ *
+ * Example Usage:
+ *
+ * int WS = 0;
+ * LexTokenDef token_defs[TOKENS_COUNT] = {
+ *  LEX_TOKENDEF(WS, matching_rule, .skip = true) // defined token "WS" in the index 0
+ * };
+*/
+#define LEX_TOKENDEF(id, rulefn, ...) \
+  [id] = (TokenDef){ .name = ((const char*)#id) + LEX_TOKEN_ID_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
+
+/*
+ * This macro expects a 'TokenDef' static array, that could be either 
+ * definined globally, or in local stack. 
+ */
+#define LEX_TOKENMAP(tkdefs) \
+  (TokenMap) { \
+    .token_defs = tkdefs, \
+    .id_range = sizeof(tkdefs) / sizeof(tkdefs[0]) \
+  }
+
+/*
+ * These two macros doesn't do a lot things, it's intent is all about legibility.
+ * Use it to create and merge branches (which are just independent copies of the lexer) 
+ * in order to creating complex parsers.
+ */
+#define LEX_BRANCH(l_ptr) (*l)                  // Ex: Lex b = LEX_BRANCH(l);   // Create a branch of l (which is a pointer)
+#define LEX_MERGE_BRANCH(l_ptr, b) *l_ptr = b;  // Ex: LEX_MERGE_BRANCH(l, b);  // Apply changes from b into l
+
+/*
+ * Returns a pointer to the start of the token on the source code.
+ * NOTE: It's not null-terminate as the source is ideally imutable.
+ */
+#define lex_tkstr(token) ((const char*)(token.cursor.source + token.cursor.index))
+
+/*
+ * Get the length of a token.
+ */
+#define lex_tklen(token) ((size_t)token.cursor.length)
+
+/*
+ * Get token name, defined by it's type on the TokenDef initialization.
+ */
+#define lex_tkname(lexer, token) ((const char*)lexer.map.token_defs[token.id].name)
+
+/*
+ * Get a pointer for the source code the cursor position
+ */
+#define lex_curstr(cursor) ((const char*)(cursor.source + cursor.index))
+
+/*
+ * Get a single char from the source code at the cursor position
+ */
+#define lex_curch(cursor) ((const char)(cursor.source[cursor.index]))
+
+/*
+ * Get cursor start index
+ */
+#define lex_curstart(cursor) ((size_t)(cursor.index))
+
+/*
+ * Get cursor end index
+ */
+#define lex_curend(cursor) ((size_t)(cursor.index + cursor.length))
+
+/// STRUCTURES
+
+typedef struct {
+  size_t lineno, column;
+} LexCursorPosition; 
+
+typedef struct {
+  const char* source;
+  size_t index, length;
+} LexCursor;
+
+typedef size_t (*LexerRule)(LexCursor cursor);
+
+typedef struct {
+  /* When it's set, all the matched tokens with this option will not be
+   * emitted by lex_current(), unless the Lex.no_skip flag is set.
+   */
+  bool skip;  
+} LexTokenOptions;
+
+typedef struct {
+  const char* name;
+  LexerRule rule;
+  LexTokenOptions opt;
+} LexTokenDef;
+
+typedef struct {
+  LexTokenDef *token_defs;
+  size_t id_range;
+} LexTokenMap;
+
+typedef int LexTokenId;
+
+typedef struct {
+  LexCursor cursor;
+  LexTokenId id;
+} LexToken;
+
+typedef struct {
+  LexTokenMap map;
+  LexCursor cursor;
+  LexToken tk;
+  bool has_token;  
+  bool no_skip;     // Used to ignore TokenOptions.skip flag
+} Lex;
+
+/* 
+ * LEX_INVALID_TOKEN:
+ * Error code that's returned by lex_current when some 
+ * input from current source couldn't be matched to any 
+ * token definition (LexTokenDef).
+ *
+ * LEX_EOF:
+ * It means that the lexer already reached the end of file.
+ *
+ * LEX_SUCESS:
+ * The lexer sucessfully obtained a token from the current 
+ * cursor position.
+ */
+typedef enum { 
+  LEX_INVALID_TOKEN = -1, 
+  LEX_EOF = 0,
+  LEX_SUCESS = 1,
+} LexResult;
+
+/// FOWARD DECLARATIONS
+
+/* 
+ * Initializes a new lexer object on the stack.
+ * It expects a LexTokenMap as fiest argument, which can be
+ * created with the macro 'LEX_TOKENDEF'
+ */
+Lex lex_init(LexTokenMap map, const char* source);
+
+/*
+ * Get a token from the current 'l->cursor' position.
+ * The function returns true  whenever it sucessfully obtain 
+ * a token, otherwise if it failed or reached the end of file, 
+ * the return will be false. As the 'result' paramenter is optional
+ * it could be passed as NULL, but if it's not, it will be set to the 
+ * corresponding 'LexResult' value. 
+ *
+ * Also, 'l->has_token' is set to true if it succeed.
+ */
+bool lex_current(Lex* l, LexResult* result);
+
+/*
+ * Matches current token with the given 'id', if it matched, returns true 
+ * and set optional parameter 'tk' to consumed token. It will automatically call 
+ * for 'lex_move' when it sucessfully matches the desired id, and just return false 
+ * otherwise.
+ */
+bool lex_consume(Lex* l, LexToken* tk, LexTokenId id);
+
+/*
+ * It will conditionally consume the current token if it's id and string value
+ * matches to the given 'id' and 'match' parameters respectively. 
+ * The 'match_len' parameter is useful for string without nullbyte terminator.
+ * If it is not the case, you could use the simplified version 'lex_skip'.
+ */
+bool lex_skipn(Lex* l, LexTokenId id, const char* match, size_t match_len);
+
+/*
+ * It will conditionally consume the current token if it's id and string value
+ * matches to the given 'id' and 'match' parameters respectively. 
+ */
+bool lex_skip(Lex* l, LexTokenId id, const char* match);
+
+/*
+ * Move cursor to the end of current token.
+ * If 'l->has_token' is false, it will do nothing.
+ */
+void lex_move(Lex* l);
+
+/*
+ * Utilitary function, that can be used to match the char at the current cursor
+ * position with a given list of chars. 'chars' could be a string or an array.
+ */
+bool lex_match_charsn(LexCursor cursor, const char* chars, int count);
+
+/*
+ * Utilitary function, that can be used to match the char at the current cursor
+ * position with a given list of chars.
+ * NOTE: This function expects a null terminated sequence of chars, that
+ * could be either an string literal, or a manually configured array of chars 
+ * ending with '\0'. If it doesn't fit to your needs, you can also use 'lex_match_charsn'.
+ */
+bool lex_match_chars(LexCursor cursor, const char* chars);
+
+/*
+  * Copy token string value to a internal static buffer.
+  * The buffer size is fixed at 1024 bytes, if the token exceeds this limit
+  * the string value will be clamped to this maximum value.
+  * NOTE: As a static buffer it will be overriden by every call, so don't use it
+  * for anything other than debug.
+  */
+const char* lex_tkstr_tmp(LexToken tk);
+
+/*
+ * Copy token string value to a heap allocated buffer.
+ * The library is not responsible for deallocate it.
+ */
+char* lex_tkstr_dup(LexToken tk);
+
+/*
+ * Get cursor column position by searching for the first occurrency of 
+ * '\n' before the 'cursor->index'. 
+ */
+size_t lex_curcol(LexCursor cursor);
+
+/*
+ * Get cursor line position by scanning all occurrencies of '\n' before 'cursor->index'
+ */
+size_t lex_curline(LexCursor cursor);
+
+/*
+ *Get cursor line and column positions as a LexCursorPosition object. 
+ * That's an alias for both  'lex_curcol' and 'lex_curline'.
+ */
+LexCursorPosition lex_curpos(LexCursor cursor);
+
+/*
+ * Built-in rule for White-Space tokens.
+ * It uses isscape() from 'ctype.h' as a matching rule. 
+ */
+size_t lex_builtin_rule_ws(LexCursor cursor);
+
+#ifdef LEX_IMPLEMENTATION
+
+#include <ctype.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+
+Lex lex_init(LexTokenMap map, const char* source) {
+  return (Lex){
+    .map = map,
+    .cursor = { .source = source,}
+  };
+}
+
+bool lex_current(Lex* l, LexResult* result) {
+  if (l->has_token) {
+    if (result)
+      *result = LEX_SUCESS;
+
+    return true;
+  }
+
+  LexCursor cursor = l->cursor;
+
+  if (cursor.source[cursor.index] == '\0') {
+    if (result)
+      *result = LEX_EOF;
+
+    return false;
+  }
+
+  for (LexTokenId id = 0; id < l->map.id_range; id++) {
+    LexTokenDef tkdef = l->map.token_defs[id];
+    size_t len = tkdef.rule(cursor);
+
+    if (len != LEX_NO_MATCH) {
+      cursor.length = len;
+
+      l->cursor = cursor;
+      l->tk = (LexToken){
+        .cursor = cursor,
+        .id = id,
+      };
+      l->has_token = true;
+
+      if (!l->no_skip && l->map.token_defs[id].opt.skip) {
+        lex_move(l);
+        return lex_current(l, result);
+      }
+
+      if (result)
+        *result = LEX_SUCESS;
+
+      return true;      
+    }
+  }
+
+  if (result)
+    *result = LEX_INVALID_TOKEN;
+
+  return false;
+}
+ 
+
+bool lex_consume(Lex* l, LexToken* tk, LexTokenId id) { 
+  if (lex_current(l, NULL)) {
+    if (l->tk.id == id) {
+      if (tk)
+        *tk = l->tk;
+
+      lex_move(l);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool lex_skipn(Lex* l, LexTokenId id, const char* match, size_t match_len) {
+  Lex b = LEX_BRANCH(l);
+
+  LexToken tk;
+  if (lex_consume(&b, &tk, id)) {
+    if (lex_tklen(b.tk) == match_len && strncmp(lex_tkstr(tk), match, match_len) == 0) {
+      LEX_MERGE_BRANCH(l, b);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool lex_skip(Lex* l, LexTokenId id, const char* match) {
+  return lex_skipn(l, id, match, strlen(match));
+}
+
+void lex_move(Lex* l) {
+  if (l->has_token) {
+    l->cursor.index += l->cursor.length;
+    l->cursor.length = 0;
+    l->has_token = false;
+  }
+}
+
+bool lex_match_charsn(LexCursor cursor, const char* chars, int count) {
+  for (int i = 0; i < count; i++) {
+    if (cursor.source[cursor.index] == chars[i])
+      return true; 
+  }
+
+  return false;
+}
+
+bool lex_match_chars(LexCursor cursor, const char* chars) {
+  return lex_match_charsn(cursor, chars, strlen(chars));
+}
+
+const char* lex_tkstr_tmp(LexToken tk) {
+  static char buf[1024];
+
+  size_t len = lex_tklen(tk);
+  if (len > sizeof(buf))
+    len = sizeof(buf);
+  
+  strncpy(buf, lex_tkstr(tk), len);
+  buf[len] = '\0';
+  return buf;
+}
+
+char* lex_tkstr_dup(LexToken tk) {
+  size_t len = lex_tklen(tk);
+  char* buf = malloc(len);
+  strncpy(buf, lex_tkstr(tk), len);
+  return buf;
+}
+
+size_t lex_curcol(LexCursor cursor) {
+  size_t col = 0;
+  for (int i = lex_curstart(cursor) - 1; i >= 0; i--, col++) {
+    if (cursor.source[cursor.index + i] == '\n')
+      return col;
+  }
+
+  return col;
+}
+
+size_t lex_curline(LexCursor cursor) {
+  size_t lines = 1;
+  for (int i = 0; i < lex_curstart(cursor); i++) {
+    if (cursor.source[i] == '\n')
+      lines++;
+  }
+
+  return lines;
+}
+
+LexCursorPosition lex_curpos(LexCursor cursor) {
+  return (LexCursorPosition) { 
+    .lineno = lex_curline(cursor), 
+    .column = lex_curcol(cursor),
+  };
+}
+
+size_t lex_builtin_rule_ws(LexCursor cursor) { 
+  size_t len = LEX_NO_MATCH;
+
+  for (;; len++) {
+    char ch = cursor.source[cursor.index + len];
+
+    if (ch == '\0' || !isspace(ch))
+      break;
+  }
+
+  return len; 
+}
+
+
+#endif
+
+
+#ifdef LEX_STRIP_PREFIX
+
+/* 
+ * By defining this macro before including lex.h, you'll be able to 
+ * access any libray symbol without prefixing with 'lex'.
+ *
+ * NOTE: If there's some naming conflics with your project libraries,
+ * you could use "#undef SYMBOL" to remove it.
+ *
+ * Ex:
+ * #define LEX_STRIP_PREFIX
+ * #include <lex.h>
+ * #undef SUCESS
+ * #define SUCESS "overriden symbol"
+ */
+
+/// NO PREFIX MACROS
+#define NO_MATCH LEX_NO_MATCH
+#define TOKENMAP LEX_TOKENMAP
+#define TOKENDEF LEX_TOKENDEF
+#define BRANCH LEX_BRANCH
+#define MERGE_BRANCH LEX_MERGE_BRANCH
+#define tkstr lex_tkstr
+#define tklen lex_tklen
+#define tkname lex_tkname
+#define curstr lex_curstr
+#define curch lex_curch
+#define curstart lex_curstart
+#define curend lex_curend
+
+/// NO PREFIX STRUCTURES
+#define CursorPosition LexCursorPosition
+#define Cursor LexCursor
+#define TokenOptions LexTokenOptions
+#define TokenDef LexTokenDef
+#define TokenMap LexTokenMap
+#define TokenId LexTokenId
+#define Token LexToken
+
+/// NO PREFIX FUNCTIONS
+#define init lex_init
+#define current lex_current
+#define consume lex_consume
+#define skipn lex_skipn
+#define skip(l, id, match) lex_skip // This skip macro conflicts with skip flag from LexTokenOptions
+#define move lex_move
+#define match_charsn lex_match_charsn
+#define match_chars lex_match_chars
+#define tkstr_tmp lex_tkstr_tmp
+#define tkstr_dup lex_tkstr_dup
+#define curcol lex_curcol
+#define curline lex_curline
+#define curpos lex_curline
+#define builtin_rule_ws lex_builtin_rule_ws
+
+#endif
+
+#endif
