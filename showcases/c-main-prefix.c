@@ -3,7 +3,7 @@
 /*
  * This showcase is an example of how to use lex.h features.
  *
- * Note that since LEX_STRIP_PREFIX is NOT defined the 'lex_' prefix is needed for use all lex.h functions, structures, or macros.
+ * Note that since LEX_STRIP_PREFIX is NOT defined, the 'lex_' prefix is needed for use all lex.h functions, structures, or macros.
  * You can see this same example without prefixes at ./c-main-prefix.c
  */
 
@@ -15,6 +15,8 @@
 
 typedef enum {
   T_WS,
+  T_COMMENT,
+  T_ML_COMMENT,
   T_KWORD,
   T_TERM,
   T_STRING,
@@ -23,23 +25,26 @@ typedef enum {
   T_COUNT,
 } Tokens;
 
+size_t rule_comment(LexCursor cursor);
+size_t rule_ml_comment(LexCursor cursor);
 size_t rule_kword(LexCursor cursor);
 size_t rule_term(LexCursor cursor);
-size_t rule_string(LexCursor cursor);
 size_t rule_number(LexCursor cursor);
 
 int main() {
   LexTokenType tkdefs[T_COUNT] = {
     LEX_TOKENTYPE(T_WS, lex_builtin_rule_ws, .skip = true),
+    LEX_TOKENTYPE(T_COMMENT, rule_comment, .skip = true),
+    LEX_TOKENTYPE(T_ML_COMMENT, rule_ml_comment, .skip = true),
     LEX_TOKENTYPE(T_KWORD, rule_kword),
     LEX_TOKENTYPE(T_TERM, rule_term),
-    LEX_TOKENTYPE(T_STRING, rule_string),
+    LEX_TOKENTYPE(T_STRING, lex_builtin_rule_dqstring),
     LEX_TOKENTYPE(T_NUMBER, rule_number),
     LEX_TOKENTYPE(T_ID, lex_builtin_rule_id),
   };
 
   LexTokenMap tkmap = LEX_TOKENMAP(tkdefs);
-  Lex l = lex_init(tkmap, "int main() {\n\tprint(\"Hello world\");\n\treturn 0;\n}");
+  Lex l = lex_init(tkmap, "// This is single line a comment\nint main() {\n\tprint(\"Hello world\");\n\treturn 0;\n} /* This comment \n can be multiline! */");
 
   lex_print_hl(l, true);
 
@@ -63,6 +68,16 @@ int main() {
   return 0;
 }
 
+// '//' .* '\n'?
+size_t rule_comment(LexCursor cursor) {
+  return lex_match_region(cursor, "//", "\n", true);
+}
+
+// '/*' .* '*/'
+size_t rule_ml_comment(LexCursor cursor) {
+  return lex_match_region(cursor, "/*", "*/", false);
+}
+
 // int | return
 size_t rule_kword(LexCursor cursor) {
   const char *kwords[] = {"int", "return"};
@@ -81,11 +96,6 @@ size_t rule_kword(LexCursor cursor) {
 // '(' | ')' | '{' | '}'
 size_t rule_term(LexCursor cursor) {
   return lex_match_chars(cursor, "(){};") ? 1 : LEX_NO_MATCH;
-}
-
-
-size_t rule_string(LexCursor cursor) {
-  return lex_match_wrapped(cursor, '"', true);
 }
 
 // [0-9]+

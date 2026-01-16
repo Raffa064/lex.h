@@ -9,6 +9,7 @@
  *
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -35,11 +36,6 @@
 #ifndef LEX_TOKEN_ID_OFFSET
 #define LEX_TOKEN_ID_OFFSET 0
 #endif
-
-/*
- * You can use this while creating 'rule functions' to indicate non matching cases.
- */
-#define LEX_NO_MATCH 0
 
 /*
  * This macros is indent to be called inside a static 'TokenDef' array.
@@ -117,6 +113,11 @@
  * Get cursor end index
  */
 #define lex_curend(cursor) ((size_t)(cursor.index + cursor.length))
+
+/*
+ * You can use this while creating 'rule functions' to indicate non matching cases.
+ */
+#define LEX_NO_MATCH 0
 
 /// STRUCTURES
 
@@ -278,6 +279,15 @@ size_t lex_match_keyword(LexCursor cursor, const char* keyword);
 
 size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped);
 
+//TODO
+size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len);
+
+//TODO
+size_t lex_match_exact(LexCursor cursor, const char* match);
+
+//TODO
+size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix);
+
 
 /*
   * Copy token string value to a internal static buffer.
@@ -311,10 +321,16 @@ size_t lex_curline(LexCursor cursor);
 void lex_curreset(LexCursor *cursor);
 
 /*
- *Get cursor line and column positions as a LexCursorPosition object. 
+ * Get cursor line and column positions as a LexCursorPosition object. 
  * That's an alias for both  'lex_curcol' and 'lex_curline'.
  */
 LexCursorPosition lex_curpos(LexCursor cursor);
+
+/*
+ * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
+ */
+LexCursorPosition lex_curmove(LexCursor *cursor, ssize_t N);
+
 
 /*
  * Built-in rule for White-Space tokens.
@@ -331,6 +347,28 @@ size_t lex_builtin_rule_ws(LexCursor cursor);
  * prevent it to override other token types. 
  */
 size_t lex_builtin_rule_id(LexCursor cursor);
+
+/*
+ * Built-in rule for double quoted strings. (Ex: "Hello world" ) 
+ * NOTE: It already handles scaped delimiters < \" >, but scaping the final string is not handled 
+ * by the library since the input source code is indent to be imutable.
+ */
+size_t lex_builtin_rule_dqstring(LexCursor cursor);
+
+/*
+ * Built-in rule for single quoted strings (Ex: 'Hello world' ). 
+ * NOTE: It already handles scaped delimiters < \' >, but scaping the final string is not handled 
+ * by the library since the input source code is indent to be imutable.
+ */
+size_t lex_builtin_rule_sqstring(LexCursor cursor);
+
+/*
+ * Built-in rule for JavaScript/Python-like string, which can be both single/double 
+ * quoted (Ex: "Hello world" or 'Hello world' ). 
+ * NOTE: It already handles scaped delimiters < \" | \' >, but scaping the final string is not handled 
+ * by the library since the input source code is indent to be imutable.
+ */
+size_t lex_builtin_rule_string(LexCursor cursor);
 
 /*
  * Print source code to the console, colorizing diferent tokens.
@@ -493,6 +531,47 @@ size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_sca
   return LEX_NO_MATCH;
 }
 
+size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len) {
+  const char *str = lex_curstr(cursor);
+
+  if (strncmp(str, match, len) == 0)
+    return len;
+
+  return LEX_NO_MATCH;
+}
+
+size_t lex_match_exact(LexCursor cursor, const char* match) {
+  return lex_match_exactn(cursor, match, strlen(match));
+}
+
+size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix) {
+  size_t prefix_len = strlen(prefix);
+  size_t suffix_len = strlen(suffix);
+
+  if (lex_match_exact(cursor, prefix)) {
+    LexCursor cur = cursor;
+    lex_curmove(&cur, prefix_len);
+
+    bool found_suffix = false;
+    while (lex_curch(cur) != '\0') {
+      if (lex_match_exact(cur, suffix)) {
+        lex_curmove(&cur, suffix_len);
+        found_suffix = true;
+        break;
+      }
+      
+      lex_curmove(&cur, 1);
+    }
+
+    if (optional_suffix || found_suffix)
+      return lex_curstart(cur) - lex_curstart(cursor);
+      
+    return LEX_NO_MATCH; // Non-optional suffix
+  }
+
+  return LEX_NO_MATCH;  
+}
+
 const char* lex_tkstr_tmp(LexToken tk) {
   static char buf[1024];
 
@@ -543,6 +622,11 @@ LexCursorPosition lex_curpos(LexCursor cursor) {
   };
 }
 
+
+LexCursorPosition lex_curmove(LexCursor *cursor, ssize_t N) {
+  cursor->index += N;
+}
+
 size_t lex_builtin_rule_ws(LexCursor cursor) { 
   size_t len = LEX_NO_MATCH;
 
@@ -569,6 +653,22 @@ size_t lex_builtin_rule_id(LexCursor cursor) {
   }
 
   return LEX_NO_MATCH;
+}
+
+size_t lex_builtin_rule_dqstring(LexCursor cursor) {
+  return lex_match_wrapped(cursor, '"', true);
+}
+
+size_t lex_builtin_rule_sqstring(LexCursor cursor) {
+  return lex_match_wrapped(cursor, '\'', true);
+}
+
+size_t lex_builtin_rule_string(LexCursor cursor) {
+  size_t len = lex_match_wrapped(cursor, '"', true);
+  if (len != LEX_NO_MATCH)
+    return len;
+
+  return lex_match_wrapped(cursor, '\'', true);
 }
 
 void lex_print_hl(Lex l, bool print_labels) {
@@ -654,13 +754,20 @@ void lex_print_hl(Lex l, bool print_labels) {
 #define match_keywordn lex_match_keywordn
 #define match_keyword lex_match_keyword
 #define match_wrapped lex_match_wrapped
+#define match_exactn lex_match_exactn
+#define match_exact lex_match_exact
+#define match_region lex_match_region
 #define tkstr_tmp lex_tkstr_tmp
 #define tkstr_dup lex_tkstr_dup
 #define curcol lex_curcol
 #define curline lex_curline
 #define curpos lex_curline
+#define curmove lex_curmove
 #define builtin_rule_ws lex_builtin_rule_ws
 #define builtin_rule_id lex_builtin_rule_id
+#define builtin_rule_dqstring lex_builtin_rule_dqstring
+#define builtin_rule_sqstring lex_builtin_rule_sqstring
+#define builtin_rule_string lex_builtin_rule_string
 #define print_hl lex_print_hl
 
 #endif
