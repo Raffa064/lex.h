@@ -1,7 +1,8 @@
 // Minimal JSON lexer 
 
 #include <stdio.h>
-#define LEX_TOKEN_ID_OFFSET 3 // Remove "JT_" prefix from TokenType.name
+
+#define LEX_TOKEN_NAME_OFFSET 3 // Remove "JT_" prefix from token names
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 

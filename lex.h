@@ -16,7 +16,7 @@
  * PRE-INCLUDE OPTIONS:
  *  - LEX_IMPLEMENTATION          Necessary to export lex.h implementations as it is a single-header library
  *  - LEX_STRIP_PREFIX            It will #define all library symbols without 'lex_' prefix 
- *  - LEX_TOKEN_NAME_OFFSET         Can be used to strip tokens name prefix (read more about on it's definition)
+ *  - LEX_TOKEN_NAME_OFFSET       Can be used to strip tokens name prefix (read more about on it's definition)
  *  - LEX_DISABLE_BUILTIN_RULES   Disables all builtin rules (use it if you wanna implement everything by yourself).
  */
 
@@ -304,7 +304,7 @@ size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len);
  *
  * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
  */
-size_t lex_match_exact(LexCursor cursor, const char* match);
+inline size_t lex_match_exact(LexCursor cursor, const char* match);
 
 /*
  * Utilitary function for matching a region that starts with some prefix, and ends with some suffix.
@@ -342,18 +342,18 @@ size_t lex_curline(LexCursor cursor);
 /*
  * Reset cursor length and position to zero
  */
-void lex_curreset(LexCursor *cursor);
+inline void lex_curreset(LexCursor *cursor);
 
 /*
  * Get cursor line and column positions as a LexCursorPosition object. 
  * That's an alias for both  'lex_curcol' and 'lex_curline'.
  */
-LexCursorPosition lex_curpos(LexCursor cursor);
+inline LexCursorPosition lex_curpos(LexCursor cursor);
 
 /*
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
  */
-void lex_curmove(LexCursor *cursor, ssize_t N);
+inline void lex_curmove(LexCursor *cursor, ssize_t N);
 
 /*
  * Print source code to the console, colorizing diferent tokens.
@@ -384,14 +384,14 @@ size_t lex_builtin_rule_id(LexCursor cursor);
  * NOTE: It already handles scaped delimiters < \" >, but scaping the final string is not handled 
  * by the library since the input source code is indent to be imutable.
  */
-size_t lex_builtin_rule_dqstring(LexCursor cursor);
+inline size_t lex_builtin_rule_dqstring(LexCursor cursor);
 
 /*
  * Built-in rule for single quoted strings (Ex: 'Hello world' ). 
  * NOTE: It already handles scaped delimiters < \' >, but scaping the final string is not handled 
  * by the library since the input source code is indent to be imutable.
  */
-size_t lex_builtin_rule_sqstring(LexCursor cursor);
+inline size_t lex_builtin_rule_sqstring(LexCursor cursor);
 
 /*
  * Built-in rule for JavaScript/Python-like string, which can be both single/double 
@@ -405,23 +405,23 @@ size_t lex_builtin_rule_string(LexCursor cursor);
  * Built-in rule for  Python-like sharp comments.
  * Ex: # This is a comment
  */
-size_t lex_builtin_rule_pylike_comment(LexCursor cursor);
+inline size_t lex_builtin_rule_pylike_comment(LexCursor cursor);
 
 /*
  * Built-in rule for  asm-like semicolon comments.
  * Ex: ; This is a comment
  */
-size_t lex_builtin_rule_asmlike_comment(LexCursor cursor);
+inline size_t lex_builtin_rule_asmlike_comment(LexCursor cursor);
 
 /*
  * Built-in rule for  C-like double-dash comments.
  * Ex: // This is a comment
  */
-size_t lex_builtin_rule_clike_comment(LexCursor cursor);
+inline size_t lex_builtin_rule_clike_comment(LexCursor cursor);
 
 // Built-in rule for  C-like multiline comments.
 // Ex:  /* This is c-like ml-comment */ 
-size_t lex_rule_builtin_rule_clike_mlcomment(LexCursor cursor);
+inline size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
 
 #endif
 
@@ -682,7 +682,6 @@ LexCursorPosition lex_curpos(LexCursor cursor) {
   };
 }
 
-
 void lex_curmove(LexCursor *cursor, ssize_t N) {
   cursor->index += N;
 }
@@ -774,7 +773,7 @@ size_t lex_builtin_rule_clike_comment(LexCursor cursor) {
   return lex_match_region(cursor, "//", "\n", true);
 }
 
-size_t lex_rule_builtin_rule_clike_mlcomment(LexCursor cursor) {
+size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
   return lex_match_region(cursor, "/*", "*/", false);
 }
 
@@ -843,6 +842,9 @@ size_t lex_rule_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define curline lex_curline
 #define curpos lex_curline
 #define curmove lex_curmove
+#define print_hl lex_print_hl
+
+#ifndef LEX_DISABLE_BUILTIN_RULES
 #define builtin_rule_ws lex_builtin_rule_ws
 #define builtin_rule_id lex_builtin_rule_id
 #define builtin_rule_dqstring lex_builtin_rule_dqstring
@@ -851,9 +853,8 @@ size_t lex_rule_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define builtin_rule_pylike_comment lex_builtin_rule_pylike_comment
 #define builtin_rule_asmlike_comment lex_builtin_rule_asmlike_comment
 #define builtin_rule_clike_comment lex_builtin_rule_clike_comment
-#define builtin_rule_clike_mlcomment lex_rule_builtin_rule_clike_mlcomment
-
-#define print_hl lex_print_hl
+#define builtin_rule_clike_mlcomment lex_builtin_rule_clike_mlcomment
+#endif
 
 #endif
 

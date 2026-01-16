@@ -9,40 +9,38 @@
  */
 
 #define LEX_STRIP_PREFIX
-#define LEX_TOKEN_ID_OFFSET 2
+#define LEX_TOKEN_NAME_OFFSET 2 // Remove "T_" from token names
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 
 #define ARRAY_LEN(array) (sizeof(array) / sizeof(array[0]))
 
 typedef enum {
+  T_KWORD,
+  T_TERM,
+  T_NUMBER,
   T_WS,
   T_COMMENT,
   T_ML_COMMENT,
-  T_KWORD,
-  T_TERM,
   T_STRING,
-  T_NUMBER,
   T_ID,
   T_COUNT,
 } Tokens;
 
-size_t rule_comment(Cursor cursor);
-size_t rule_ml_comment(Cursor cursor);
 size_t rule_kword(Cursor cursor);
 size_t rule_term(Cursor cursor);
 size_t rule_number(Cursor cursor);
 
 int main() {
   TokenType tkdefs[T_COUNT] = {
-    TOKENTYPE(T_WS, builtin_rule_ws, .skip = true),
-    TOKENTYPE(T_COMMENT, rule_comment, .skip = true),
-    TOKENTYPE(T_ML_COMMENT, rule_ml_comment, .skip = true),
-    TOKENTYPE(T_KWORD, rule_kword),
-    TOKENTYPE(T_TERM, rule_term),
-    TOKENTYPE(T_STRING, builtin_rule_dqstring),
-    TOKENTYPE(T_NUMBER, rule_number),
-    TOKENTYPE(T_ID, builtin_rule_id),
+    TOKENTYPE(T_KWORD,      rule_kword),
+    TOKENTYPE(T_TERM,       rule_term),
+    TOKENTYPE(T_NUMBER,     rule_number),
+    TOKENTYPE(T_COMMENT,    builtin_rule_clike_comment,   .skip = true),
+    TOKENTYPE(T_ML_COMMENT, builtin_rule_clike_mlcomment, .skip = true),
+    TOKENTYPE(T_WS,         builtin_rule_ws,              .skip = true),
+    TOKENTYPE(T_STRING,     builtin_rule_dqstring),
+    TOKENTYPE(T_ID,         builtin_rule_id),
   };
 
   TokenMap tkmap = TOKENMAP(tkdefs);
@@ -68,17 +66,6 @@ int main() {
   }
 
   return 0;
-}
-
-
-// '//' .* '\n'?
-size_t rule_comment(Cursor cursor) {
-  return match_region(cursor, "//", "\n", true);
-}
-
-// '/*' .* '*/'
-size_t rule_ml_comment(Cursor cursor) {
-  return match_region(cursor, "/*", "*/", false);
 }
 
 // int | return

@@ -7,40 +7,38 @@
  * You can see this same example without prefixes at ./c-main-prefix.c
  */
 
-#define LEX_TOKEN_ID_OFFSET 2
+#define LEX_TOKEN_NAME_OFFSET 2 // Remove "T_" from token names
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 
 #define ARRAY_LEN(array) (sizeof(array) / sizeof(array[0]))
 
 typedef enum {
+  T_KWORD,
+  T_TERM,
+  T_NUMBER,
   T_WS,
   T_COMMENT,
   T_ML_COMMENT,
-  T_KWORD,
-  T_TERM,
   T_STRING,
-  T_NUMBER,
   T_ID,
   T_COUNT,
 } Tokens;
 
-size_t rule_comment(LexCursor cursor);
-size_t rule_ml_comment(LexCursor cursor);
 size_t rule_kword(LexCursor cursor);
 size_t rule_term(LexCursor cursor);
 size_t rule_number(LexCursor cursor);
 
 int main() {
   LexTokenType tkdefs[T_COUNT] = {
-    LEX_TOKENTYPE(T_WS, lex_builtin_rule_ws, .skip = true),
-    LEX_TOKENTYPE(T_COMMENT, rule_comment, .skip = true),
-    LEX_TOKENTYPE(T_ML_COMMENT, rule_ml_comment, .skip = true),
-    LEX_TOKENTYPE(T_KWORD, rule_kword),
-    LEX_TOKENTYPE(T_TERM, rule_term),
-    LEX_TOKENTYPE(T_STRING, lex_builtin_rule_dqstring),
-    LEX_TOKENTYPE(T_NUMBER, rule_number),
-    LEX_TOKENTYPE(T_ID, lex_builtin_rule_id),
+    LEX_TOKENTYPE(T_KWORD,      rule_kword),
+    LEX_TOKENTYPE(T_TERM,       rule_term),
+    LEX_TOKENTYPE(T_NUMBER,     rule_number),
+    LEX_TOKENTYPE(T_WS,         lex_builtin_rule_ws,              .skip = true),
+    LEX_TOKENTYPE(T_COMMENT,    lex_builtin_rule_clike_comment,   .skip = true),
+    LEX_TOKENTYPE(T_ML_COMMENT, lex_builtin_rule_clike_mlcomment, .skip = true),
+    LEX_TOKENTYPE(T_STRING,     lex_builtin_rule_dqstring),
+    LEX_TOKENTYPE(T_ID,         lex_builtin_rule_id),
   };
 
   LexTokenMap tkmap = LEX_TOKENMAP(tkdefs);
@@ -66,16 +64,6 @@ int main() {
   }
 
   return 0;
-}
-
-// '//' .* '\n'?
-size_t rule_comment(LexCursor cursor) {
-  return lex_match_region(cursor, "//", "\n", true);
-}
-
-// '/*' .* '*/'
-size_t rule_ml_comment(LexCursor cursor) {
-  return lex_match_region(cursor, "/*", "*/", false);
 }
 
 // int | return
