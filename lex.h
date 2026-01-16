@@ -1,5 +1,10 @@
+// ----------------- lex.h | made by Raffa064 --------------------
+// Check out for new versions at http://github;com/Raffa064/lex.h
+
 #ifndef lex_H
 #define lex_H
+
+#define LEX_VERSION 1
 
 /*
  * ABOUT
@@ -7,16 +12,22 @@
  * lex.h is a minimal sigle-header lexer library, designed to be fast, and readable.
  * The library could be entirely stack allocated without needing for heap allocation.
  *
+ *
+ * PRE-INCLUDE OPTIONS:
+ *  - LEX_IMPLEMENTATION          Necessary to export lex.h implementations as it is a single-header library
+ *  - LEX_STRIP_PREFIX            It will #define all library symbols without 'lex_' prefix 
+ *  - LEX_TOKEN_NAME_OFFSET         Can be used to strip tokens name prefix (read more about on it's definition)
+ *  - LEX_DISABLE_BUILTIN_RULES   Disables all builtin rules (use it if you wanna implement everything by yourself).
  */
 
+#include <asm-generic/errno-base.h>
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
 /// MACROS
-
-#define LEX_VERSION 1
 
 /*
  * This macro is used to offset the TokenDef.name created by TOKENTYPE macro.
@@ -24,7 +35,7 @@
  *
  * Ex:
  *
- * #define LEX_TOKEN_ID_OFFSET 2
+ * #define LEX_TOKEN_NAME_OFFSET 2
  * #include "lex.h"
  *
  * enum { T_KEYWORD } ExampleTokens;
@@ -33,8 +44,8 @@
  * TOKENTYPE(T_KEYWORD, lexer_rule_here) // The name for this token will be "KEYWORD" instead of "T_KEYWORD"
  * ...
  */
-#ifndef LEX_TOKEN_ID_OFFSET
-#define LEX_TOKEN_ID_OFFSET 0
+#ifndef LEX_TOKEN_NAME_OFFSET
+#define LEX_TOKEN_NAME_OFFSET 0
 #endif
 
 /*
@@ -44,11 +55,12 @@
  * name will be stored literally as it is, as the name** for this token.
  *
  * (*): The index determines the order of execution for the matching, so 
- * it's recommend to take care about it.
+ *      it's recommend to take care about it.
  *
  * (**): The name will be stored as string, and if you are prefixing your 
- * variables names with some sort of namespace, you can strip it out by 
- * defining LEX_TOKEN_ID_OFFSET to the size of your prefix.
+ *       variables names with some sort of namespace, you can strip it out by 
+ *       defining LEX_TOKEN_NAME_OFFSET to the size of your prefix. 
+ *       Ex: "T_KEYWORD" -> "KEYWORD"
  *
  * Example Usage:
  *
@@ -58,7 +70,7 @@
  * };
 */
 #define LEX_TOKENTYPE(id, rulefn, ...) \
-  [id] = (LexTokenType){ .name = ((const char*)#id) + LEX_TOKEN_ID_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
+  [id] = (LexTokenType){ .name = ((const char*)#id) + LEX_TOKEN_NAME_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
 
 /*
  * This macro expects a 'TokenDef' static array, that could be either 
@@ -67,7 +79,7 @@
 #define LEX_TOKENMAP(tkdefs) \
   (LexTokenMap) { \
     .token_defs = tkdefs, \
-    .id_range = sizeof(tkdefs) / sizeof(tkdefs[0]) \
+    .count = sizeof(tkdefs) / sizeof(tkdefs[0]) \
   }
 
 /*
@@ -147,7 +159,7 @@ typedef struct {
 
 typedef struct {
   LexTokenType *token_defs;
-  size_t id_range;
+  size_t count;
 } LexTokenMap;
 
 typedef int LexTokenId;
@@ -262,7 +274,7 @@ size_t lex_match_chars(LexCursor cursor, const char* chars);
 size_t lex_match_keywordn(LexCursor cursor, const char* keyword, size_t len);
 
 /*
- * Utilitary function for matching "keywords", with builtin boundary check.
+ * Utilitary function (specifically made) for matching "keywords", with builtin boundary check.
  *
  * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
  */
@@ -279,15 +291,27 @@ size_t lex_match_keyword(LexCursor cursor, const char* keyword);
 
 size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped);
 
-//TODO
+/*
+ * Utilitary function for exact matching.
+ *
+ * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
+ */
 size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len);
 
-//TODO
+/*
+ * Utilitary function for exact matching.
+ * This function expects a null-terminated string for 'match'.
+ *
+ * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
+ */
 size_t lex_match_exact(LexCursor cursor, const char* match);
 
-//TODO
+/*
+ * Utilitary function for matching a region that starts with some prefix, and ends with some suffix.
+ *
+ * NOTE: If 'optional_suffix' is set, it will match to the end of file when sufix is not found.
+ */
 size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix);
-
 
 /*
   * Copy token string value to a internal static buffer.
@@ -329,9 +353,16 @@ LexCursorPosition lex_curpos(LexCursor cursor);
 /*
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
  */
-LexCursorPosition lex_curmove(LexCursor *cursor, ssize_t N);
+void lex_curmove(LexCursor *cursor, ssize_t N);
 
+/*
+ * Print source code to the console, colorizing diferent tokens.
+ *
+ * Use 'print_labels' to show a text with the token names for each color after the code. 
+ */
+void lex_print_hl(Lex lex, bool print_caption);
 
+#ifndef LEX_DISABLE_BUILTIN_RULES
 /*
  * Built-in rule for White-Space tokens.
  * It uses isscape() from 'ctype.h' as a matching rule.
@@ -371,11 +402,28 @@ size_t lex_builtin_rule_sqstring(LexCursor cursor);
 size_t lex_builtin_rule_string(LexCursor cursor);
 
 /*
- * Print source code to the console, colorizing diferent tokens.
- *
- * Use 'print_labels' to show a text with the token names for each color after the code. 
+ * Built-in rule for  Python-like sharp comments.
+ * Ex: # This is a comment
  */
-void lex_print_hl(Lex lex, bool print_caption);
+size_t lex_builtin_rule_pylike_comment(LexCursor cursor);
+
+/*
+ * Built-in rule for  asm-like semicolon comments.
+ * Ex: ; This is a comment
+ */
+size_t lex_builtin_rule_asmlike_comment(LexCursor cursor);
+
+/*
+ * Built-in rule for  C-like double-dash comments.
+ * Ex: // This is a comment
+ */
+size_t lex_builtin_rule_clike_comment(LexCursor cursor);
+
+// Built-in rule for  C-like multiline comments.
+// Ex:  /* This is c-like ml-comment */ 
+size_t lex_rule_builtin_rule_clike_mlcomment(LexCursor cursor);
+
+#endif
 
 #ifdef LEX_IMPLEMENTATION
 
@@ -384,6 +432,18 @@ void lex_print_hl(Lex lex, bool print_caption);
 #include <string.h>
 
 Lex lex_init(LexTokenMap map, const char* source) {
+  LexTokenType unset = {0};
+
+  for (int i = 0; i < map.count; i++) {
+    if (memcmp(&map.token_defs[i], &unset, sizeof(LexTokenType)) == 0) {
+      char msg[512];
+      sprintf(msg, "Lex initialization failed due to an missing token definition. TokenId '%d' is unset", i);
+      errno = EINVAL;
+      perror(msg);
+      exit(1);
+    }
+  }
+
   return (Lex){
     .map = map,
     .cursor = { .source = source,}
@@ -407,7 +467,7 @@ bool lex_current(Lex* l, LexResult* result) {
     return false;
   }
 
-  for (LexTokenId id = 0; id < l->map.id_range; id++) {
+  for (LexTokenId id = 0; id < l->map.count; id++) {
     LexTokenType tkdef = l->map.token_defs[id];
     size_t len = tkdef.rule(cursor);
 
@@ -623,9 +683,40 @@ LexCursorPosition lex_curpos(LexCursor cursor) {
 }
 
 
-LexCursorPosition lex_curmove(LexCursor *cursor, ssize_t N) {
+void lex_curmove(LexCursor *cursor, ssize_t N) {
   cursor->index += N;
 }
+
+void lex_print_hl(Lex l, bool print_labels) {
+  // It has 42 different highlights
+  static const int colors[] = { 31, 32, 33, 34, 35, 36, 37 };
+  static const int styles[] = { 0, 1, 3, 4, 7, 9 };
+
+  lex_curreset(&l.cursor); // return to begining of file
+  l.no_skip = true;
+
+  while (lex_current(&l, NULL)) {
+    int s = styles[l.tk.id / 6];
+    int c = colors[l.tk.id % 7];
+    
+    printf("\e[%d;%dm%.*s", s, c, (int)lex_tklen(l.tk), lex_tkstr(l.tk));
+    lex_move(&l);
+  }
+
+  printf("\e[0m\n");
+
+  if (print_labels) {
+    for (int  i = 0; i < l.map.count; i++) {
+      int s = styles[i / 6];
+      int c = colors[i % 7];
+      printf("\e[%d;%dm%s ", s, c, l.map.token_defs[i].name);
+    }
+    
+    printf("\e[0m\n");
+  }
+}
+
+#ifndef LEX_DISABLE_BUILTIN_RULES
 
 size_t lex_builtin_rule_ws(LexCursor cursor) { 
   size_t len = LEX_NO_MATCH;
@@ -671,34 +762,23 @@ size_t lex_builtin_rule_string(LexCursor cursor) {
   return lex_match_wrapped(cursor, '\'', true);
 }
 
-void lex_print_hl(Lex l, bool print_labels) {
-  // It has 42 different highlights
-  static const int colors[] = { 31, 32, 33, 34, 35, 36, 37 };
-  static const int styles[] = { 0, 1, 3, 4, 7, 9 };
-
-  lex_curreset(&l.cursor); // return to begining of file
-  l.no_skip = true;
-
-  while (lex_current(&l, NULL)) {
-    int s = styles[l.tk.id / 6];
-    int c = colors[l.tk.id % 7];
-    
-    printf("\e[%d;%dm%.*s", s, c, (int)lex_tklen(l.tk), lex_tkstr(l.tk));
-    lex_move(&l);
-  }
-
-  printf("\e[0m\n");
-
-  if (print_labels) {
-    for (int  i = 0; i < l.map.id_range; i++) {
-      int s = styles[i / 6];
-      int c = colors[i % 7];
-      printf("\e[%d;%dm%s ", s, c, l.map.token_defs[i].name);
-    }
-    
-    printf("\e[0m\n");
-  }
+size_t lex_builtin_rule_pylike_comment(LexCursor cursor) {
+  return lex_match_region(cursor, "#", "\n", true);
 }
+
+size_t lex_builtin_rule_asmlike_comment(LexCursor cursor) {
+  return lex_match_region(cursor, ";", "\n", true);
+}
+
+size_t lex_builtin_rule_clike_comment(LexCursor cursor) {
+  return lex_match_region(cursor, "//", "\n", true);
+}
+
+size_t lex_rule_builtin_rule_clike_mlcomment(LexCursor cursor) {
+  return lex_match_region(cursor, "/*", "*/", false);
+}
+
+#endif
 
 #endif
 
@@ -768,6 +848,11 @@ void lex_print_hl(Lex l, bool print_labels) {
 #define builtin_rule_dqstring lex_builtin_rule_dqstring
 #define builtin_rule_sqstring lex_builtin_rule_sqstring
 #define builtin_rule_string lex_builtin_rule_string
+#define builtin_rule_pylike_comment lex_builtin_rule_pylike_comment
+#define builtin_rule_asmlike_comment lex_builtin_rule_asmlike_comment
+#define builtin_rule_clike_comment lex_builtin_rule_clike_comment
+#define builtin_rule_clike_mlcomment lex_rule_builtin_rule_clike_mlcomment
+
 #define print_hl lex_print_hl
 
 #endif
