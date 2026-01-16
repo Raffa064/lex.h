@@ -15,17 +15,16 @@ typedef enum {
   JT_COUNT,
 } JsonTokens;
 
-size_t json_lex_rule_string(LexCursor cursor);
 size_t json_lex_rule_bool(LexCursor cursor);
 size_t json_lex_rule_number(LexCursor cursor);
 size_t json_lex_rule_term(LexCursor cursor);
 
 LexTokenType json_token_types[JT_COUNT] = {
-  LEX_TOKENTYPE(JT_WS, lex_builtin_rule_ws, .skip = true),
-  LEX_TOKENTYPE(JT_STRING, json_lex_rule_string),  
-  LEX_TOKENTYPE(JT_BOOL, json_lex_rule_bool),  
+  LEX_TOKENTYPE(JT_WS,     lex_builtin_rule_ws,    .skip = true),
+  LEX_TOKENTYPE(JT_STRING, lex_builtin_rule_string),  
+  LEX_TOKENTYPE(JT_BOOL,   json_lex_rule_bool),  
   LEX_TOKENTYPE(JT_NUMBER, json_lex_rule_number),  
-  LEX_TOKENTYPE(JT_TERM, json_lex_rule_term),  
+  LEX_TOKENTYPE(JT_TERM,   json_lex_rule_term),  
 };
 
 LexTokenMap json_map = LEX_TOKENMAP(json_token_types);
@@ -33,17 +32,14 @@ LexTokenMap json_map = LEX_TOKENMAP(json_token_types);
 int main() {
   Lex lex = lex_init(json_map, 
     "{\n"
-    "  \"watch\": [\n"
-    "    \".\"\n"
-    "  ],\n"
-    "  \"ignore\": [\n"
-    "    \"**/build/**\"\n"
-    "  ],\n"
-    "  \"some-number\": .1"
-    "  \"ext\": \"sh,txt,c,h,py,csv\",\n"
-    "  \"exec\": \"./run.sh\"\n"
+    "  \"array\": [ \"str\", 64, .2, false, [] ],\n"
+    "  \"some-number\": .1,\n"
+    "  \"bool-option\": true,\n"
+    "  \"text\": \"Hello world\"\n"
     "}\n"
   );
+
+  lex_print_hl(lex, true);
 
   LexResult result;
   while (lex_current(&lex, &result)) {
@@ -64,22 +60,6 @@ int main() {
   }
 
   return 0;
-}
-
-// '"' .* '"'
-size_t json_lex_rule_string(LexCursor cursor) {
-  size_t len = LEX_NO_MATCH;
-
-  len = lex_match_wrapped(cursor, '\"', true);
-  
-  if (len)
-    return len;
-
- len = lex_match_wrapped(cursor, '\'', true);
- if (len)
-   return len;
-
-  return LEX_NO_MATCH;
 }
 
 size_t json_lex_rule_bool(LexCursor cursor) { 

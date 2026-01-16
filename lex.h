@@ -240,6 +240,11 @@ bool lex_skipn(Lex* l, LexTokenId id, const char* match, size_t match_len);
 bool lex_skip(Lex* l, LexTokenId id, const char* match);
 
 /*
+ * Move "l->cursor" to a custom location.
+ */
+void lex_move_to(Lex* l, LexCursor to);
+
+/*
  * Move cursor to the end of current token.
  * If 'l->has_token' is false, it will do nothing.
  */
@@ -360,7 +365,7 @@ inline void lex_curmove(LexCursor *cursor, ssize_t N);
  *
  * Use 'print_labels' to show a text with the token names for each color after the code. 
  */
-void lex_print_hl(Lex lex, bool print_caption);
+void lex_print_hl(Lex l, bool print_caption);
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
 /*
@@ -530,6 +535,11 @@ bool lex_skipn(Lex* l, LexTokenId id, const char* match, size_t match_len) {
 
 bool lex_skip(Lex* l, LexTokenId id, const char* match) {
   return lex_skipn(l, id, match, strlen(match));
+}
+
+void lex_move_to(Lex* l, LexCursor to) {
+  l->cursor = to;
+  l->has_token = false;
 }
 
 void lex_move(Lex* l) {
@@ -827,6 +837,7 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define consume lex_consume
 #define skipn lex_skipn
 #define skip(l, id, match) lex_skip // This skip macro conflicts with skip flag from LexTokenOptions
+#define move_to lex_move_to
 #define move lex_move
 #define match_charsn lex_match_charsn
 #define match_chars lex_match_chars
