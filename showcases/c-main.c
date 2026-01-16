@@ -3,13 +3,13 @@
 /*
  * This showcase is an example of how to use lex.h features.
  *
- * Note that since LEX_STRIP_PREFIX is defined, no 'lex_' prefix is needed for use lex.h functions, structures, or macros.
- * You can see this same example with prefixes at ./c-main-prefix.c
+ * Note that since STRIP_PREFIX is NOT defined the '' prefix is needed for use all lex.h functions, structures, or macros.
+ * You can see this same example without prefixes at ./c-main-prefix.c.
+ *
  */
 
-#define LEX_TOKEN_ID_OFFSET 2
 #define LEX_STRIP_PREFIX
-
+#define LEX_TOKEN_ID_OFFSET 2
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 
@@ -19,6 +19,7 @@ typedef enum {
   T_WS,
   T_KWORD,
   T_TERM,
+  T_STRING,
   T_NUMBER,
   T_ID,
   T_COUNT,
@@ -26,6 +27,7 @@ typedef enum {
 
 size_t rule_kword(Cursor cursor);
 size_t rule_term(Cursor cursor);
+size_t rule_string(Cursor cursor);
 size_t rule_number(Cursor cursor);
 
 int main() {
@@ -33,12 +35,15 @@ int main() {
     TOKENTYPE(T_WS, builtin_rule_ws, .skip = true),
     TOKENTYPE(T_KWORD, rule_kword),
     TOKENTYPE(T_TERM, rule_term),
+    TOKENTYPE(T_STRING, rule_string),
     TOKENTYPE(T_NUMBER, rule_number),
     TOKENTYPE(T_ID, builtin_rule_id),
   };
 
   TokenMap tkmap = TOKENMAP(tkdefs);
-  Lex l = init(tkmap, "int main() {\n\treturn 0;\n}");
+  Lex l = init(tkmap, "int main() {\n\tprint(\"Hello world\");\n\treturn 0;\n}");
+
+  print_hl(l, true);
 
   LexResult result;
   while (current(&l, &result)) {
@@ -47,9 +52,17 @@ int main() {
   }
 
   if (result == LEX_INVALID_TOKEN) {
-    fprintf(stderr, "\e[31mErro: (%2zu:%2zu) %-10s '%s'\e[0m\n", curline(l.cursor), curcol(l.cursor), tkname(l, l.tk), tkstr_tmp(l.tk));
+    fprintf(stderr, 
+      "\e[31mErro: (%2zu:%2zu) '%s'\e[0m\n", 
+      curline(l.cursor), 
+      curcol(l.cursor), 
+      curstr(l.cursor)
+    );
+
     return 1;
   }
+
+  return 0;
 }
 
 // int | return
@@ -57,8 +70,9 @@ size_t rule_kword(Cursor cursor) {
   const char *kwords[] = {"int", "return"};
 
   for (int i = 0; i < ARRAY_LEN(kwords); i++) {
-    size_t len = sizeof(kwords[i]);
-    if (match_keywordn(cursor, kwords[i], len))
+    size_t len = match_keyword(cursor, kwords[i]);
+
+    if (len != NO_MATCH)
       return len;
   }
 
@@ -69,6 +83,11 @@ size_t rule_kword(Cursor cursor) {
 // '(' | ')' | '{' | '}'
 size_t rule_term(Cursor cursor) {
   return match_chars(cursor, "(){};") ? 1 : NO_MATCH;
+}
+
+
+size_t rule_string(Cursor cursor) {
+  return match_wrapped(cursor, '"', true);
 }
 
 // [0-9]+

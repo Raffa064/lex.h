@@ -8,7 +8,6 @@
  */
 
 #define LEX_TOKEN_ID_OFFSET 2
-
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 
@@ -18,6 +17,7 @@ typedef enum {
   T_WS,
   T_KWORD,
   T_TERM,
+  T_STRING,
   T_NUMBER,
   T_ID,
   T_COUNT,
@@ -25,6 +25,7 @@ typedef enum {
 
 size_t rule_kword(LexCursor cursor);
 size_t rule_term(LexCursor cursor);
+size_t rule_string(LexCursor cursor);
 size_t rule_number(LexCursor cursor);
 
 int main() {
@@ -32,12 +33,15 @@ int main() {
     LEX_TOKENTYPE(T_WS, lex_builtin_rule_ws, .skip = true),
     LEX_TOKENTYPE(T_KWORD, rule_kword),
     LEX_TOKENTYPE(T_TERM, rule_term),
+    LEX_TOKENTYPE(T_STRING, rule_string),
     LEX_TOKENTYPE(T_NUMBER, rule_number),
     LEX_TOKENTYPE(T_ID, lex_builtin_rule_id),
   };
 
   LexTokenMap tkmap = LEX_TOKENMAP(tkdefs);
-  Lex l = lex_init(tkmap, "int main() {\n\treturn 0;\n}");
+  Lex l = lex_init(tkmap, "int main() {\n\tprint(\"Hello world\");\n\treturn 0;\n}");
+
+  lex_print_hl(l, true);
 
   LexResult result;
   while (lex_current(&l, &result)) {
@@ -46,9 +50,17 @@ int main() {
   }
 
   if (result == LEX_INVALID_TOKEN) {
-    fprintf(stderr, "\e[31mErro: (%2zu:%2zu) %-10s '%s'\e[0m\n", lex_curline(l.cursor), lex_curcol(l.cursor), lex_tkname(l, l.tk), lex_tkstr_tmp(l.tk));
+    fprintf(stderr, 
+      "\e[31mErro: (%2zu:%2zu) '%s'\e[0m\n", 
+      lex_curline(l.cursor), 
+      lex_curcol(l.cursor), 
+      lex_curstr(l.cursor)
+    );
+
     return 1;
   }
+
+  return 0;
 }
 
 // int | return
@@ -56,8 +68,9 @@ size_t rule_kword(LexCursor cursor) {
   const char *kwords[] = {"int", "return"};
 
   for (int i = 0; i < ARRAY_LEN(kwords); i++) {
-    size_t len = sizeof(kwords[i]);
-    if (lex_match_keywordn(cursor, kwords[i], len))
+    size_t len = lex_match_keyword(cursor, kwords[i]);
+
+    if (len != LEX_NO_MATCH)
       return len;
   }
 
@@ -68,6 +81,11 @@ size_t rule_kword(LexCursor cursor) {
 // '(' | ')' | '{' | '}'
 size_t rule_term(LexCursor cursor) {
   return lex_match_chars(cursor, "(){};") ? 1 : LEX_NO_MATCH;
+}
+
+
+size_t rule_string(LexCursor cursor) {
+  return lex_match_wrapped(cursor, '"', true);
 }
 
 // [0-9]+

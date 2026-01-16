@@ -1,9 +1,3 @@
-build/%: showcases/% | build lex.h
-	cc $^ -o $@
-
-build:
-	mkdir -p build
-
 run: build/$(SHOWCASE)
 	@if [ -z '$(SHOWCASE)' ]; then\
 		echo "Available showcases: (Run with 'make SHOWCASE=name')";\
@@ -11,5 +5,12 @@ run: build/$(SHOWCASE)
 	else\
 		./build/$(SHOWCASE);\
 	fi
+
+build/%: showcases/% lex.h | build
+	cc $^ -o $@
+
+build:
+	mkdir -p build
+
 
 .PHONY: run

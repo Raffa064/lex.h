@@ -306,6 +306,11 @@ size_t lex_curcol(LexCursor cursor);
 size_t lex_curline(LexCursor cursor);
 
 /*
+ * Reset cursor length and position to zero
+ */
+void lex_curreset(LexCursor *cursor);
+
+/*
  *Get cursor line and column positions as a LexCursorPosition object. 
  * That's an alias for both  'lex_curcol' and 'lex_curline'.
  */
@@ -326,6 +331,13 @@ size_t lex_builtin_rule_ws(LexCursor cursor);
  * prevent it to override other token types. 
  */
 size_t lex_builtin_rule_id(LexCursor cursor);
+
+/*
+ * Print source code to the console, colorizing diferent tokens.
+ *
+ * Use 'print_labels' to show a text with the token names for each color after the code. 
+ */
+void lex_print_hl(Lex lex, bool print_caption);
 
 #ifdef LEX_IMPLEMENTATION
 
@@ -520,6 +532,10 @@ size_t lex_curline(LexCursor cursor) {
   return lines;
 }
 
+void lex_curreset(LexCursor *cursor) {
+  cursor->index = cursor->length = 0;
+}
+
 LexCursorPosition lex_curpos(LexCursor cursor) {
   return (LexCursorPosition) { 
     .lineno = lex_curline(cursor), 
@@ -553,6 +569,35 @@ size_t lex_builtin_rule_id(LexCursor cursor) {
   }
 
   return LEX_NO_MATCH;
+}
+
+void lex_print_hl(Lex l, bool print_labels) {
+  // It has 42 different highlights
+  static const int colors[] = { 31, 32, 33, 34, 35, 36, 37 };
+  static const int styles[] = { 0, 1, 3, 4, 7, 9 };
+
+  lex_curreset(&l.cursor); // return to begining of file
+  l.no_skip = true;
+
+  while (lex_current(&l, NULL)) {
+    int s = styles[l.tk.id / 6];
+    int c = colors[l.tk.id % 7];
+    
+    printf("\e[%d;%dm%.*s", s, c, (int)lex_tklen(l.tk), lex_tkstr(l.tk));
+    lex_move(&l);
+  }
+
+  printf("\e[0m\n");
+
+  if (print_labels) {
+    for (int  i = 0; i < l.map.id_range; i++) {
+      int s = styles[i / 6];
+      int c = colors[i % 7];
+      printf("\e[%d;%dm%s ", s, c, l.map.token_defs[i].name);
+    }
+    
+    printf("\e[0m\n");
+  }
 }
 
 #endif
@@ -616,6 +661,7 @@ size_t lex_builtin_rule_id(LexCursor cursor) {
 #define curpos lex_curline
 #define builtin_rule_ws lex_builtin_rule_ws
 #define builtin_rule_id lex_builtin_rule_id
+#define print_hl lex_print_hl
 
 #endif
 
