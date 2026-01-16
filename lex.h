@@ -9,6 +9,7 @@
  *
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -17,7 +18,7 @@
 #define LEX_VERSION 1
 
 /*
- * This macro is used to offset the TokenDef.name created by TOKENDEF macro.
+ * This macro is used to offset the TokenDef.name created by TOKENTYPE macro.
  * You can define this macro if your token's ID has some prefix.
  *
  * Ex:
@@ -28,7 +29,7 @@
  * enum { T_KEYWORD } ExampleTokens;
  *
  * ...
- * TOKENDEF(T_KEYWORD, lexer_rule_here) // The name for this token will be "KEYWORD" instead of "T_KEYWORD"
+ * TOKENTYPE(T_KEYWORD, lexer_rule_here) // The name for this token will be "KEYWORD" instead of "T_KEYWORD"
  * ...
  */
 #ifndef LEX_TOKEN_ID_OFFSET
@@ -57,18 +58,18 @@
  *
  * int WS = 0;
  * LexTokenDef token_defs[TOKENS_COUNT] = {
- *  LEX_TOKENDEF(WS, matching_rule, .skip = true) // defined token "WS" in the index 0
+ *  LEX_TOKENTYPE(WS, matching_rule, .skip = true) // defined token "WS" in the index 0
  * };
 */
-#define LEX_TOKENDEF(id, rulefn, ...) \
-  [id] = (TokenDef){ .name = ((const char*)#id) + LEX_TOKEN_ID_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
+#define LEX_TOKENTYPE(id, rulefn, ...) \
+  [id] = (LexTokenType){ .name = ((const char*)#id) + LEX_TOKEN_ID_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
 
 /*
  * This macro expects a 'TokenDef' static array, that could be either 
  * definined globally, or in local stack. 
  */
 #define LEX_TOKENMAP(tkdefs) \
-  (TokenMap) { \
+  (LexTokenMap) { \
     .token_defs = tkdefs, \
     .id_range = sizeof(tkdefs) / sizeof(tkdefs[0]) \
   }
@@ -98,7 +99,7 @@
 #define lex_tkname(lexer, token) ((const char*)lexer.map.token_defs[token.id].name)
 
 /*
- * Get a pointer for the source code the cursor position
+ * Get a pointer for the source code at cursor position
  */
 #define lex_curstr(cursor) ((const char*)(cursor.source + cursor.index))
 
@@ -141,10 +142,10 @@ typedef struct {
   const char* name;
   LexerRule rule;
   LexTokenOptions opt;
-} LexTokenDef;
+} LexTokenType;
 
 typedef struct {
-  LexTokenDef *token_defs;
+  LexTokenType *token_defs;
   size_t id_range;
 } LexTokenMap;
 
@@ -187,7 +188,7 @@ typedef enum {
 /* 
  * Initializes a new lexer object on the stack.
  * It expects a LexTokenMap as fiest argument, which can be
- * created with the macro 'LEX_TOKENDEF'
+ * created with the macro 'LEX_TOKENTYPE'
  */
 Lex lex_init(LexTokenMap map, const char* source);
 
@@ -234,17 +235,49 @@ void lex_move(Lex* l);
 /*
  * Utilitary function, that can be used to match the char at the current cursor
  * position with a given list of chars. 'chars' could be a string or an array.
+ *
+ * If matched, returns the length of the match, that in the case of char can only be 1,
+ * otherwise it returns 0 (LEX_NO_MATCH).
  */
-bool lex_match_charsn(LexCursor cursor, const char* chars, int count);
+size_t lex_match_charsn(LexCursor cursor, const char* chars, int count);
 
 /*
  * Utilitary function, that can be used to match the char at the current cursor
  * position with a given list of chars.
+ *
+ * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
+ *
  * NOTE: This function expects a null terminated sequence of chars, that
  * could be either an string literal, or a manually configured array of chars 
  * ending with '\0'. If it doesn't fit to your needs, you can also use 'lex_match_charsn'.
  */
-bool lex_match_chars(LexCursor cursor, const char* chars);
+size_t lex_match_chars(LexCursor cursor, const char* chars);
+
+/*
+ * Utilitary function for matching "keywords", with builtin boundary check.
+ *
+ * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
+ */
+size_t lex_match_keywordn(LexCursor cursor, const char* keyword, size_t len);
+
+/*
+ * Utilitary function for matching "keywords", with builtin boundary check.
+ *
+ * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
+ */
+size_t lex_match_keyword(LexCursor cursor, const char* keyword);
+
+/*
+ * Utilitary function for matching string-like structures.
+ *
+ * If 'can_be_scaped' is set, it will allows the occurrency of 'delimiter' inside the match 
+ * if it's preceeded by '\'.
+ *
+ * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
+ */
+
+size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped);
+
 
 /*
   * Copy token string value to a internal static buffer.
@@ -280,15 +313,24 @@ LexCursorPosition lex_curpos(LexCursor cursor);
 
 /*
  * Built-in rule for White-Space tokens.
- * It uses isscape() from 'ctype.h' as a matching rule. 
+ * It uses isscape() from 'ctype.h' as a matching rule.
+ * NOTE: It's recommend to set 'skip' flag on token type definition (TokenOptions)
  */
 size_t lex_builtin_rule_ws(LexCursor cursor);
+
+/*
+ * Built-in rule for Identifiers following the most common pattern found on modern languages,
+ * useful for user defined names (such as variables and class names).
+ * The same as [a-zA-Z$_][a-zA-Z$_0-9]*
+ * NOTE: It's usually a good practice to place IDs at the end of your LexTokenMap to 
+ * prevent it to override other token types. 
+ */
+size_t lex_builtin_rule_id(LexCursor cursor);
 
 #ifdef LEX_IMPLEMENTATION
 
 #include <ctype.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <string.h>
 
 Lex lex_init(LexTokenMap map, const char* source) {
@@ -316,7 +358,7 @@ bool lex_current(Lex* l, LexResult* result) {
   }
 
   for (LexTokenId id = 0; id < l->map.id_range; id++) {
-    LexTokenDef tkdef = l->map.token_defs[id];
+    LexTokenType tkdef = l->map.token_defs[id];
     size_t len = tkdef.rule(cursor);
 
     if (len != LEX_NO_MATCH) {
@@ -388,17 +430,55 @@ void lex_move(Lex* l) {
   }
 }
 
-bool lex_match_charsn(LexCursor cursor, const char* chars, int count) {
+size_t lex_match_charsn(LexCursor cursor, const char* chars, int count) {
   for (int i = 0; i < count; i++) {
     if (cursor.source[cursor.index] == chars[i])
-      return true; 
+      return 1; // sizeof char 
   }
 
-  return false;
+  return LEX_NO_MATCH;
 }
 
-bool lex_match_chars(LexCursor cursor, const char* chars) {
+size_t lex_match_chars(LexCursor cursor, const char* chars) {
   return lex_match_charsn(cursor, chars, strlen(chars));
+}
+
+size_t lex_match_keywordn(LexCursor cursor, const char* keyword, size_t len) {
+  const char *str = lex_curstr(cursor);
+
+  if (strncmp(str, keyword, len) == 0) {
+    char lookahead = str[len];
+
+    if (isalnum(lookahead)) // boundary check: prevent cases like 'interrupt' to be split into 'int' 'errupt' (keyword/id)
+      return LEX_NO_MATCH;
+
+    return len;
+  }
+
+  return LEX_NO_MATCH;
+}
+
+size_t lex_match_keyword(LexCursor cursor, const char* keyword) {
+  return lex_match_keywordn(cursor, keyword, strlen(keyword));
+}
+
+size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped) {
+  const char *str = lex_curstr(cursor);
+  
+  if (str[0] == delimiter) {
+    for (size_t len = 1; str[len] != '\0'; len++) {
+      if (str[len] == delimiter) {
+        if (can_be_scaped) {
+          if (str[len - 1] == '\\')  // ignore scaped delimiter
+            continue;
+        }
+
+        return len + 1; // following inclusive-exclusive convention
+      }
+    }
+  }
+
+  return LEX_NO_MATCH;
 }
 
 const char* lex_tkstr_tmp(LexToken tk) {
@@ -460,6 +540,20 @@ size_t lex_builtin_rule_ws(LexCursor cursor) {
   return len; 
 }
 
+size_t lex_builtin_rule_id(LexCursor cursor) {
+  const char *start = lex_curstr(cursor);
+  if (isalpha(*start) || *start == '$' || *start == '_') {
+    for (int len = 1; start[len] != '\0'; len++) {
+      char ch = start[len];
+      if (isalnum(ch) || ch == '$' || ch == '_')
+        continue;
+
+      return len;
+    }
+  }
+
+  return LEX_NO_MATCH;
+}
 
 #endif
 
@@ -483,7 +577,7 @@ size_t lex_builtin_rule_ws(LexCursor cursor) {
 /// NO PREFIX MACROS
 #define NO_MATCH LEX_NO_MATCH
 #define TOKENMAP LEX_TOKENMAP
-#define TOKENDEF LEX_TOKENDEF
+#define TOKENTYPE LEX_TOKENTYPE
 #define BRANCH LEX_BRANCH
 #define MERGE_BRANCH LEX_MERGE_BRANCH
 #define tkstr lex_tkstr
@@ -498,7 +592,7 @@ size_t lex_builtin_rule_ws(LexCursor cursor) {
 #define CursorPosition LexCursorPosition
 #define Cursor LexCursor
 #define TokenOptions LexTokenOptions
-#define TokenDef LexTokenDef
+#define TokenType LexTokenType
 #define TokenMap LexTokenMap
 #define TokenId LexTokenId
 #define Token LexToken
@@ -512,12 +606,16 @@ size_t lex_builtin_rule_ws(LexCursor cursor) {
 #define move lex_move
 #define match_charsn lex_match_charsn
 #define match_chars lex_match_chars
+#define match_keywordn lex_match_keywordn
+#define match_keyword lex_match_keyword
+#define match_wrapped lex_match_wrapped
 #define tkstr_tmp lex_tkstr_tmp
 #define tkstr_dup lex_tkstr_dup
 #define curcol lex_curcol
 #define curline lex_curline
 #define curpos lex_curline
 #define builtin_rule_ws lex_builtin_rule_ws
+#define builtin_rule_id lex_builtin_rule_id
 
 #endif
 
