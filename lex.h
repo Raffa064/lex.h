@@ -131,6 +131,12 @@
  */
 #define LEX_NO_MATCH 0
 
+#ifdef LEX_IMPLEMENTATION
+#define LEX_INLINE inline
+#else
+#define LEX_INLINE
+#endif
+
 /// STRUCTURES
 
 typedef struct {
@@ -309,7 +315,7 @@ size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len);
  *
  * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
  */
-inline size_t lex_match_exact(LexCursor cursor, const char* match);
+LEX_INLINE size_t lex_match_exact(LexCursor cursor, const char* match);
 
 /*
  * Utilitary function for matching a region that starts with some prefix, and ends with some suffix.
@@ -347,18 +353,18 @@ size_t lex_curline(LexCursor cursor);
 /*
  * Reset cursor length and position to zero
  */
-inline void lex_curreset(LexCursor *cursor);
+LEX_INLINE void lex_curreset(LexCursor *cursor);
 
 /*
  * Get cursor line and column positions as a LexCursorPosition object. 
  * That's an alias for both  'lex_curcol' and 'lex_curline'.
  */
-inline LexCursorPosition lex_curpos(LexCursor cursor);
+LEX_INLINE LexCursorPosition lex_curpos(LexCursor cursor);
 
 /*
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
  */
-inline void lex_curmove(LexCursor *cursor, ssize_t N);
+LEX_INLINE void lex_curmove(LexCursor *cursor, ssize_t N);
 
 /*
  * Print source code to the console, colorizing diferent tokens.
@@ -389,14 +395,14 @@ size_t lex_builtin_rule_id(LexCursor cursor);
  * NOTE: It already handles scaped delimiters < \" >, but scaping the final string is not handled 
  * by the library since the input source code is indent to be imutable.
  */
-inline size_t lex_builtin_rule_dqstring(LexCursor cursor);
+LEX_INLINE size_t lex_builtin_rule_dqstring(LexCursor cursor);
 
 /*
  * Built-in rule for single quoted strings (Ex: 'Hello world' ). 
  * NOTE: It already handles scaped delimiters < \' >, but scaping the final string is not handled 
  * by the library since the input source code is indent to be imutable.
  */
-inline size_t lex_builtin_rule_sqstring(LexCursor cursor);
+LEX_INLINE size_t lex_builtin_rule_sqstring(LexCursor cursor);
 
 /*
  * Built-in rule for JavaScript/Python-like string, which can be both single/double 
@@ -410,23 +416,23 @@ size_t lex_builtin_rule_string(LexCursor cursor);
  * Built-in rule for  Python-like sharp comments.
  * Ex: # This is a comment
  */
-inline size_t lex_builtin_rule_pylike_comment(LexCursor cursor);
+LEX_INLINE size_t lex_builtin_rule_pylike_comment(LexCursor cursor);
 
 /*
  * Built-in rule for  asm-like semicolon comments.
  * Ex: ; This is a comment
  */
-inline size_t lex_builtin_rule_asmlike_comment(LexCursor cursor);
+LEX_INLINE size_t lex_builtin_rule_asmlike_comment(LexCursor cursor);
 
 /*
  * Built-in rule for  C-like double-dash comments.
  * Ex: // This is a comment
  */
-inline size_t lex_builtin_rule_clike_comment(LexCursor cursor);
+LEX_INLINE size_t lex_builtin_rule_clike_comment(LexCursor cursor);
 
 // Built-in rule for  C-like multiline comments.
 // Ex:  /* This is c-like ml-comment */ 
-inline size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
+LEX_INLINE size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
 
 #endif
 
