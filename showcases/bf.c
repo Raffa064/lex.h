@@ -1,4 +1,8 @@
-// Brain Fu** Lexer
+/*
+ * Small brain Fu** Interpreter.
+ * 
+ * Run with: `make run SHOWCASE=bf.c`
+ */
 
 #include <stdio.h>
 #define LEX_IMPLEMENTATION
@@ -20,13 +24,13 @@ size_t bf_rule_operator(LexCursor cursor) { return lex_match_chars(cursor, "+-")
 size_t bf_rule_io(LexCursor cursor) { return lex_match_chars(cursor, ".,"); }
 size_t bf_rule_loop(LexCursor cursor) { return lex_match_chars(cursor, "[]"); }
 
-LexTokenType bf_tokens[BF_COUNT] = {
-  LEX_TOKENTYPE(BF_WS,       lex_builtin_rule_ws,              .skip = true),
-  LEX_TOKENTYPE(BF_COMMENT,  lex_builtin_rule_asmlike_comment, .skip = true),
-  LEX_TOKENTYPE(BF_MOVE,     bf_rule_move),
-  LEX_TOKENTYPE(BF_OPERATOR, bf_rule_operator),
-  LEX_TOKENTYPE(BF_IO,       bf_rule_io),
-  LEX_TOKENTYPE(BF_LOOP,     bf_rule_loop),
+LexType bf_tokens[BF_COUNT] = {
+  LEX_TYPE(BF_WS,       lex_builtin_rule_ws,              .skip = true),
+  LEX_TYPE(BF_COMMENT,  lex_builtin_rule_asmlike_comment, .skip = true),
+  LEX_TYPE(BF_MOVE,     bf_rule_move),
+  LEX_TYPE(BF_OPERATOR, bf_rule_operator),
+  LEX_TYPE(BF_IO,       bf_rule_io),
+  LEX_TYPE(BF_LOOP,     bf_rule_loop),
 };
 
 char* read_file(const char* path) {
@@ -52,7 +56,7 @@ char* read_file(const char* path) {
 int main() {
   char* input = read_file("./showcases/input.bf");
 
-  Lex l = lex_init(LEX_TOKENMAP(bf_tokens), input);
+  Lex l = lex_init(LEX_TYPEARRAY(bf_tokens), input);
   lex_print_hl(l, true);
 
   char      mem[128]  = {0};

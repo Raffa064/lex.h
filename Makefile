@@ -1,3 +1,5 @@
+SHOWCASE := $(SHOWCASE)$(S)
+
 run: build/$(SHOWCASE)
 	@if [ -z '$(SHOWCASE)' ]; then\
 		echo "Available showcases: (Run with 'make SHOWCASE=name')";\

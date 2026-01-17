@@ -6,6 +6,7 @@
  * Note that since STRIP_PREFIX is defined the 'lex_' prefix is NOT needed for use all lex.h functions, structures, or macros.
  * You can see this same example with prefixes at ./c-main-prefix.c.
  *
+ * Run with: `make run SHOWCASE=c-main.c`
  */
 
 #define LEX_STRIP_PREFIX
@@ -25,26 +26,31 @@ typedef enum {
   T_STRING,
   T_ID,
   T_COUNT,
-} Tokens;
+} TokenTypes;
 
 size_t rule_kword(Cursor cursor);
 size_t rule_term(Cursor cursor);
 size_t rule_number(Cursor cursor);
 
 int main() {
-  TokenType tkdefs[T_COUNT] = {
-    TOKENTYPE(T_KWORD,      rule_kword),
-    TOKENTYPE(T_TERM,       rule_term),
-    TOKENTYPE(T_NUMBER,     rule_number),
-    TOKENTYPE(T_COMMENT,    builtin_rule_clike_comment,   .skip = true),
-    TOKENTYPE(T_ML_COMMENT, builtin_rule_clike_mlcomment, .skip = true),
-    TOKENTYPE(T_WS,         builtin_rule_ws,              .skip = true),
-    TOKENTYPE(T_STRING,     builtin_rule_dqstring),
-    TOKENTYPE(T_ID,         builtin_rule_id),
+  Type types[T_COUNT] = {
+    TYPE(T_KWORD,      rule_kword),
+    TYPE(T_TERM,       rule_term),
+    TYPE(T_NUMBER,     rule_number),
+    TYPE(T_COMMENT,    builtin_rule_clike_comment,   .skip = true),
+    TYPE(T_ML_COMMENT, builtin_rule_clike_mlcomment, .skip = true),
+    TYPE(T_WS,         builtin_rule_ws,              .skip = true),
+    TYPE(T_STRING,     builtin_rule_dqstring),
+    TYPE(T_ID,         builtin_rule_id),
   };
 
-  TokenMap tkmap = TOKENMAP(tkdefs);
-  Lex l = init(tkmap, "// This is single line a comment\nint main() {\n\tprint(\"Hello world\");\n\treturn 0;\n} /* This comment \n can be multiline! */");
+  Lex l = init(TYPEARRAY(types), 
+    "// This is single line a comment\n"
+    "int main() {\n\t"
+      "print(\"Hello world\");\n\t"
+      "return 0;\n"
+    "} /* This comment \n can be multiline! */"
+  );
 
   print_hl(l, true);
 

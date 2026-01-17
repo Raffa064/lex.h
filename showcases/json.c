@@ -1,4 +1,8 @@
-// Minimal JSON lexer 
+/*
+ * Minimal JSON lexer.
+ * 
+ * Run with: `make run SHOWCASE=json.c`
+ */
 
 #include <stdio.h>
 
@@ -19,18 +23,16 @@ size_t json_lex_rule_bool(LexCursor cursor);
 size_t json_lex_rule_number(LexCursor cursor);
 size_t json_lex_rule_term(LexCursor cursor);
 
-LexTokenType json_token_types[JT_COUNT] = {
-  LEX_TOKENTYPE(JT_WS,     lex_builtin_rule_ws,    .skip = true),
-  LEX_TOKENTYPE(JT_STRING, lex_builtin_rule_string),  
-  LEX_TOKENTYPE(JT_BOOL,   json_lex_rule_bool),  
-  LEX_TOKENTYPE(JT_NUMBER, json_lex_rule_number),  
-  LEX_TOKENTYPE(JT_TERM,   json_lex_rule_term),  
+LexType json_types[JT_COUNT] = {
+  LEX_TYPE(JT_WS,     lex_builtin_rule_ws,    .skip = true),
+  LEX_TYPE(JT_STRING, lex_builtin_rule_string),  
+  LEX_TYPE(JT_BOOL,   json_lex_rule_bool),  
+  LEX_TYPE(JT_NUMBER, json_lex_rule_number),  
+  LEX_TYPE(JT_TERM,   json_lex_rule_term),  
 };
 
-LexTokenMap json_map = LEX_TOKENMAP(json_token_types);
-
 int main() {
-  Lex lex = lex_init(json_map, 
+  Lex lex = lex_init(LEX_TYPEARRAY(json_types), 
     "{\n"
     "  \"array\": [ \"str\", 64, .2, false, [] ],\n"
     "  \"some-number\": .1,\n"

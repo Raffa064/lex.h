@@ -14,10 +14,10 @@
  *
  *
  * PRE-INCLUDE OPTIONS:
- *  - LEX_IMPLEMENTATION          Necessary to export lex.h implementations as it is a single-header library
- *  - LEX_STRIP_PREFIX            It will #define all library symbols without 'lex_' prefix 
- *  - LEX_TOKEN_NAME_OFFSET       Can be used to strip tokens name prefix (read more about on it's definition)
- *  - LEX_DISABLE_BUILTIN_RULES   Disables all builtin rules (use it if you wanna implement everything by yourself).
+ *  - LEX_IMPLEMENTATION            Necessary to export lex.h implementations as it is a single-header library.
+ *  - LEX_STRIP_PREFIX              It will #define all library symbols without 'lex_' prefix.
+ *  - LEX_TYPE_NAME_OFFSET          Can be used to strip type name prefix (read more about on it's definition).
+ *  - LEX_DISABLE_BUILTIN_RULES     Disables all builtin rules (use it if you wanna implement everything by yourself).
  */
 
 #include <asm-generic/errno-base.h>
@@ -30,56 +30,66 @@
 /// MACROS
 
 /*
- * This macro is used to offset the TokenDef.name created by TOKENTYPE macro.
+ * This macro is used to offset the LexType.name created by TYPE macro.
  * You can define this macro if your token's ID has some prefix.
  *
  * Ex:
  *
- * #define LEX_TOKEN_NAME_OFFSET 2
+ * #define LEX_TYPE_NAME_OFFSET 2 // length of "T_"
  * #include "lex.h"
  *
  * enum { T_KEYWORD } ExampleTokens;
  *
  * ...
- * TOKENTYPE(T_KEYWORD, lexer_rule_here) // The name for this token will be "KEYWORD" instead of "T_KEYWORD"
+ * TYPE(T_KEYWORD, lexer_rule_here) // The name for this token will be "KEYWORD" instead of "T_KEYWORD"
  * ...
  */
-#ifndef LEX_TOKEN_NAME_OFFSET
-#define LEX_TOKEN_NAME_OFFSET 0
+#ifndef LEX_TYPE_NAME_OFFSET
+#define LEX_TYPE_NAME_OFFSET 0
 #endif
 
 /*
- * This macros is indent to be called inside a static 'TokenDef' array.
- * It's expected the parameter 'id' to be an global or local variable, 
- * where the value will be the index* of the defined token, and the it's 
+ * This macros is indent to be called ONLY inside static 'TokenType' arrays.
+ * If you need to use it in another context, use LEX_ETYPE instead.
+ *
+ * 'id' is expected to be global or local int type variable, where it's value 
+ * will be the index* of the defined type inside the array, and the it's 
  * name will be stored literally as it is, as the name** for this token.
  *
  * (*): The index determines the order of execution for the matching, so 
- *      it's recommend to take care about it.
+ *      it's recommend to take care about it. Also, the enclosing array capacity 
+ *      should be greater than the 'id'.
  *
  * (**): The name will be stored as string, and if you are prefixing your 
  *       variables names with some sort of namespace, you can strip it out by 
- *       defining LEX_TOKEN_NAME_OFFSET to the size of your prefix. 
+ *       defining LEX_TYPE_NAME_OFFSET to the size of your prefix. 
  *       Ex: "T_KEYWORD" -> "KEYWORD"
  *
  * Example Usage:
  *
- * int WS = 0;
- * LexTokenDef token_defs[TOKENS_COUNT] = {
- *  LEX_TOKENTYPE(WS, matching_rule, .skip = true) // defined token "WS" in the index 0
+ * int WS = 0; // enums are the best way to defining ids.
+ * 
+ * LexType items[TOKENS_COUNT] = {
+ *  LEX_TYPE(WS, matching_rule, .skip = true) // defined token "WS" in the index 0
  * };
 */
-#define LEX_TOKENTYPE(id, rulefn, ...) \
-  [id] = (LexTokenType){ .name = ((const char*)#id) + LEX_TOKEN_NAME_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
+#define LEX_TYPE(id, rulefn, ...) \
+  [id] = (LexType){ .name = ((const char*)#id) + LEX_TYPE_NAME_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
 
 /*
- * This macro expects a 'TokenDef' static array, that could be either 
- * definined globally, or in local stack. 
+ * The same as LEX_TYPE, but it doesn't use implicit index designator, so it can be used 
+ * outside static arrays as a normal expression.
  */
-#define LEX_TOKENMAP(tkdefs) \
-  (LexTokenMap) { \
-    .token_defs = tkdefs, \
-    .count = sizeof(tkdefs) / sizeof(tkdefs[0]) \
+#define LEX_ETYPE(id, rulefn, ...) \
+    (LexType){ .name = ((const char*)#id) + LEX_TYPE_NAME_OFFSET, .rule = rulefn, .opt = { __VA_ARGS__ } }
+
+/*
+ * This macro is an utility to create a LexTypeArray from a static LexType array.
+ */
+#define LEX_TYPEARRAY(_items) \
+  (LexTypeArray) { \
+    .items = _items, \
+    .count = sizeof(_items) / sizeof(_items[0]) \
   }
 
 /*
@@ -102,27 +112,27 @@
 #define lex_tklen(token) ((size_t)token.cursor.length)
 
 /*
- * Get token name, defined by it's type on the TokenDef initialization.
+ * Get token type name.
  */
-#define lex_tkname(lexer, token) ((const char*)lexer.map.token_defs[token.id].name)
+#define lex_tkname(lexer, token) ((const char*)lexer.types.items[token.id].name)
 
 /*
- * Get a pointer for the source code at cursor position
+ * Get a pointer for the source code at cursor position.
  */
 #define lex_curstr(cursor) ((const char*)(cursor.source + cursor.index))
 
 /*
- * Get a single char from the source code at the cursor position
+ * Get a single char from the source code at the cursor position.
  */
 #define lex_curch(cursor) ((const char)(cursor.source[cursor.index]))
 
 /*
- * Get cursor start index
+ * Get cursor start index.
  */
 #define lex_curstart(cursor) ((size_t)(cursor.index))
 
 /*
- * Get cursor end index
+ * Get cursor end index.
  */
 #define lex_curend(cursor) ((size_t)(cursor.index + cursor.length))
 
@@ -155,39 +165,38 @@ typedef struct {
    * emitted by lex_current(), unless the Lex.no_skip flag is set.
    */
   bool skip;  
-} LexTokenOptions;
+} LexTypeOptions;
 
 typedef struct {
   const char* name;
   LexerRule rule;
-  LexTokenOptions opt;
-} LexTokenType;
+  LexTypeOptions opt;
+} LexType;
 
 typedef struct {
-  LexTokenType *token_defs;
+  LexType *items;
   size_t count;
-} LexTokenMap;
+} LexTypeArray;
 
-typedef int LexTokenId;
+typedef int LexTypeIndex;
 
 typedef struct {
   LexCursor cursor;
-  LexTokenId id;
+  LexTypeIndex id;
 } LexToken;
 
 typedef struct {
-  LexTokenMap map;
+  LexTypeArray types;
   LexCursor cursor;
   LexToken tk;
   bool has_token;  
-  bool no_skip;     // Used to ignore TokenOptions.skip flag
+  bool no_skip;     // Used to ignore TypeOptions.skip flag
 } Lex;
 
 /* 
  * LEX_INVALID_TOKEN:
  * Error code that's returned by lex_current when some 
- * input from current source couldn't be matched to any 
- * token definition (LexTokenDef).
+ * input from current source couldn't be matched to any type.
  *
  * LEX_EOF:
  * It means that the lexer already reached the end of file.
@@ -206,10 +215,10 @@ typedef enum {
 
 /* 
  * Initializes a new lexer object on the stack.
- * It expects a LexTokenMap as fiest argument, which can be
- * created with the macro 'LEX_TOKENTYPE'
+ * It expects a LexTypeArray as fiest argument, which can be
+ * created with the macro 'LEX_TYPEARRAY'
  */
-Lex lex_init(LexTokenMap map, const char* source);
+Lex lex_init(LexTypeArray types, const char* source);
 
 /*
  * Get a token from the current 'l->cursor' position.
@@ -229,7 +238,7 @@ bool lex_current(Lex* l, LexResult* result);
  * for 'lex_move' when it sucessfully matches the desired id, and just return false 
  * otherwise.
  */
-bool lex_consume(Lex* l, LexToken* tk, LexTokenId id);
+bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id);
 
 /*
  * It will conditionally consume the current token if it's id and string value
@@ -237,13 +246,13 @@ bool lex_consume(Lex* l, LexToken* tk, LexTokenId id);
  * The 'match_len' parameter is useful for string without nullbyte terminator.
  * If it is not the case, you could use the simplified version 'lex_skip'.
  */
-bool lex_skipn(Lex* l, LexTokenId id, const char* match, size_t match_len);
+bool lex_skipn(Lex* l, LexTypeIndex id, const char* match, size_t match_len);
 
 /*
  * It will conditionally consume the current token if it's id and string value
  * matches to the given 'id' and 'match' parameters respectively. 
  */
-bool lex_skip(Lex* l, LexTokenId id, const char* match);
+bool lex_skip(Lex* l, LexTypeIndex id, const char* match);
 
 /*
  * Move "l->cursor" to a custom location.
@@ -369,15 +378,19 @@ LEX_INLINE void lex_curmove(LexCursor *cursor, ssize_t N);
 /*
  * Print source code to the console, colorizing diferent tokens.
  *
- * Use 'print_labels' to show a text with the token names for each color after the code. 
+ * Use 'print_labels' to show a small legend containing the meaning of each color.
  */
 void lex_print_hl(Lex l, bool print_caption);
+
+
+// TODO
+void lex_print_types(Lex l);
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
 /*
  * Built-in rule for White-Space tokens.
  * It uses isscape() from 'ctype.h' as a matching rule.
- * NOTE: It's recommend to set 'skip' flag on token type definition (TokenOptions)
+ * NOTE: It's recommend to set 'skip' flag on token type definition (TypeOptions)
  */
 size_t lex_builtin_rule_ws(LexCursor cursor);
 
@@ -385,7 +398,7 @@ size_t lex_builtin_rule_ws(LexCursor cursor);
  * Built-in rule for Identifiers following the most common pattern found on modern languages,
  * useful for user defined names (such as variables and class names).
  * The same as [a-zA-Z$_][a-zA-Z$_0-9]*
- * NOTE: It's usually a good practice to place IDs at the end of your LexTokenMap to 
+ * NOTE: It's usually a good practice to place IDs at the end of your LexTypeArray to 
  * prevent it to override other token types. 
  */
 size_t lex_builtin_rule_id(LexCursor cursor);
@@ -442,13 +455,13 @@ LEX_INLINE size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
 #include <stddef.h>
 #include <string.h>
 
-Lex lex_init(LexTokenMap map, const char* source) {
-  LexTokenType unset = {0};
+Lex lex_init(LexTypeArray types, const char* source) {
+  LexType unset = {0};
 
-  for (int i = 0; i < map.count; i++) {
-    if (memcmp(&map.token_defs[i], &unset, sizeof(LexTokenType)) == 0) {
+  for (int i = 0; i < types.count; i++) {
+    if (memcmp(&types.items[i], &unset, sizeof(LexType)) == 0) {
       char msg[512];
-      sprintf(msg, "Lex initialization failed due to an missing token definition. TokenId '%d' is unset", i);
+      sprintf(msg, "Lex initialization failed due to an missing type definition. TypeIndex '%d' is unset", i);
       errno = EINVAL;
       perror(msg);
       exit(1);
@@ -456,7 +469,7 @@ Lex lex_init(LexTokenMap map, const char* source) {
   }
 
   return (Lex){
-    .map = map,
+    .types = types,
     .cursor = { .source = source,}
   };
 }
@@ -478,8 +491,8 @@ bool lex_current(Lex* l, LexResult* result) {
     return false;
   }
 
-  for (LexTokenId id = 0; id < l->map.count; id++) {
-    LexTokenType tkdef = l->map.token_defs[id];
+  for (LexTypeIndex id = 0; id < l->types.count; id++) {
+    LexType tkdef = l->types.items[id];
     size_t len = tkdef.rule(cursor);
 
     if (len != LEX_NO_MATCH) {
@@ -492,7 +505,7 @@ bool lex_current(Lex* l, LexResult* result) {
       };
       l->has_token = true;
 
-      if (!l->no_skip && l->map.token_defs[id].opt.skip) {
+      if (!l->no_skip && l->types.items[id].opt.skip) {
         lex_move(l);
         return lex_current(l, result);
       }
@@ -511,7 +524,7 @@ bool lex_current(Lex* l, LexResult* result) {
 }
  
 
-bool lex_consume(Lex* l, LexToken* tk, LexTokenId id) { 
+bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id) { 
   if (lex_current(l, NULL)) {
     if (l->tk.id == id) {
       if (tk)
@@ -525,7 +538,7 @@ bool lex_consume(Lex* l, LexToken* tk, LexTokenId id) {
   return false;
 }
 
-bool lex_skipn(Lex* l, LexTokenId id, const char* match, size_t match_len) {
+bool lex_skipn(Lex* l, LexTypeIndex id, const char* match, size_t match_len) {
   Lex b = LEX_BRANCH(l);
 
   LexToken tk;
@@ -539,7 +552,7 @@ bool lex_skipn(Lex* l, LexTokenId id, const char* match, size_t match_len) {
   return false;
 }
 
-bool lex_skip(Lex* l, LexTokenId id, const char* match) {
+bool lex_skip(Lex* l, LexTypeIndex id, const char* match) {
   return lex_skipn(l, id, match, strlen(match));
 }
 
@@ -721,14 +734,21 @@ void lex_print_hl(Lex l, bool print_labels) {
   printf("\e[0m\n");
 
   if (print_labels) {
-    for (int  i = 0; i < l.map.count; i++) {
+    for (int  i = 0; i < l.types.count; i++) {
       int s = styles[i / 6];
       int c = colors[i % 7];
-      printf("\e[%d;%dm%s ", s, c, l.map.token_defs[i].name);
+      printf("\e[%d;%dm%s ", s, c, l.types.items[i].name);
     }
     
     printf("\e[0m\n");
   }
+}
+
+void lex_print_types(Lex l) {
+  for (int  i = 0; i < l.types.count; i++) {
+    printf("%s ", l.types.items[i].name);
+  }
+  printf("\n");
 }
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
@@ -816,8 +836,9 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 
 /// NO PREFIX MACROS
 #define NO_MATCH LEX_NO_MATCH
-#define TOKENMAP LEX_TOKENMAP
-#define TOKENTYPE LEX_TOKENTYPE
+#define TYPEARRAY LEX_TYPEARRAY
+#define TYPE LEX_TYPE
+#define ETYPE LEX_ETYPE
 #define BRANCH LEX_BRANCH
 #define MERGE_BRANCH LEX_MERGE_BRANCH
 #define tkstr lex_tkstr
@@ -831,10 +852,10 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 /// NO PREFIX STRUCTURES
 #define CursorPosition LexCursorPosition
 #define Cursor LexCursor
-#define TokenOptions LexTokenOptions
-#define TokenType LexTokenType
-#define TokenMap LexTokenMap
-#define TokenId LexTokenId
+#define TypeOptions LexTypeOptions
+#define Type LexType
+#define TypeArray LexTypeArray
+#define TypeIndex LexTypeIndex
 #define Token LexToken
 
 /// NO PREFIX FUNCTIONS
@@ -842,7 +863,7 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define current lex_current
 #define consume lex_consume
 #define skipn lex_skipn
-#define skip(l, id, match) lex_skip // This skip macro conflicts with skip flag from LexTokenOptions
+#define skip(l, id, match) lex_skip // This skip macro conflicts with skip flag from LexTypeOptions
 #define move_to lex_move_to
 #define move lex_move
 #define match_charsn lex_match_charsn
@@ -860,6 +881,7 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define curpos lex_curline
 #define curmove lex_curmove
 #define print_hl lex_print_hl
+#define print_types lex_print_types
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
 #define builtin_rule_ws lex_builtin_rule_ws

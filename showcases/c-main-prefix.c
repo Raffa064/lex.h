@@ -5,6 +5,8 @@
  *
  * Note that since LEX_STRIP_PREFIX is NOT defined, the 'lex_' prefix is needed for use all lex.h functions, structures, or macros.
  * You can see this same example without prefixes at ./c-main-prefix.c
+ *
+ * Run with: `make run SHOWCASE=c-main-prefix.c`
  */
 
 #define LEX_TOKEN_NAME_OFFSET 2 // Remove "T_" from token names
@@ -30,19 +32,25 @@ size_t rule_term(LexCursor cursor);
 size_t rule_number(LexCursor cursor);
 
 int main() {
-  LexTokenType tkdefs[T_COUNT] = {
-    LEX_TOKENTYPE(T_KWORD,      rule_kword),
-    LEX_TOKENTYPE(T_TERM,       rule_term),
-    LEX_TOKENTYPE(T_NUMBER,     rule_number),
-    LEX_TOKENTYPE(T_WS,         lex_builtin_rule_ws,              .skip = true),
-    LEX_TOKENTYPE(T_COMMENT,    lex_builtin_rule_clike_comment,   .skip = true),
-    LEX_TOKENTYPE(T_ML_COMMENT, lex_builtin_rule_clike_mlcomment, .skip = true),
-    LEX_TOKENTYPE(T_STRING,     lex_builtin_rule_dqstring),
-    LEX_TOKENTYPE(T_ID,         lex_builtin_rule_id),
+  LexType tkdefs[T_COUNT] = {
+    LEX_TYPE(T_KWORD,      rule_kword),
+    LEX_TYPE(T_TERM,       rule_term),
+    LEX_TYPE(T_NUMBER,     rule_number),
+    LEX_TYPE(T_WS,         lex_builtin_rule_ws,              .skip = true),
+    LEX_TYPE(T_COMMENT,    lex_builtin_rule_clike_comment,   .skip = true),
+    LEX_TYPE(T_ML_COMMENT, lex_builtin_rule_clike_mlcomment, .skip = true),
+    LEX_TYPE(T_STRING,     lex_builtin_rule_dqstring),
+    LEX_TYPE(T_ID,         lex_builtin_rule_id),
   };
 
-  LexTokenMap tkmap = LEX_TOKENMAP(tkdefs);
-  Lex l = lex_init(tkmap, "// This is single line a comment\nint main() {\n\tprint(\"Hello world\");\n\treturn 0;\n} /* This comment \n can be multiline! */");
+  LexTypeArray tkmap = LEX_TYPEARRAY(tkdefs);
+  Lex l = lex_init(tkmap, 
+    "// This is single line a comment\n"
+    "int main() {\n\t"
+      "print(\"Hello world\");\n\t"
+      "return 0;\n"
+    "} /* This comment \n can be multiline! */"
+  );  
 
   lex_print_hl(l, true);
 
