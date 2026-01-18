@@ -675,8 +675,10 @@ const char* lex_tkstr_tmp(LexToken tk) {
 
 char* lex_tkstr_dup(LexToken tk) {
   size_t len = lex_tklen(tk);
-  char* buf = malloc(len);
+  char* buf = malloc(len + 1);
   strncpy(buf, lex_tkstr(tk), len);
+  buf[len] = '\0';
+  
   return buf;
 }
 
