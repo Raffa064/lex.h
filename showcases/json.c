@@ -6,16 +6,16 @@
 
 #include <stdio.h>
 
-#define LEX_TOKEN_NAME_OFFSET 3 // Remove "JT_" prefix from token names
+#define LEX_TYPE_NAME_OFFSET 3 // Remove "JT_" prefix from token names
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 
 typedef enum {
   JT_WS,
   JT_STRING,
-  JT_BOOL,
-  JT_NUMBER,
   JT_TERM,
+  JT_NUMBER,
+  JT_BOOL,
   JT_COUNT,
 } JsonTokens;
 
@@ -60,6 +60,8 @@ int main() {
 
     return 1;
   }
+
+  lex_print_profiler(lex);
 
   return 0;
 }

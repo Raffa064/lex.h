@@ -10,7 +10,7 @@
  */
 
 #define LEX_STRIP_PREFIX
-#define LEX_TOKEN_NAME_OFFSET 2 // Remove "T_" from token names
+#define LEX_TYPE_NAME_OFFSET 2 // Remove "T_" from token names
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 

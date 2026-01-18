@@ -9,7 +9,7 @@
  * Run with: `make run SHOWCASE=c-main-prefix.c`
  */
 
-#define LEX_TOKEN_NAME_OFFSET 2 // Remove "T_" from token names
+#define LEX_TYPE_NAME_OFFSET 2 // Remove "T_" from token names
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 

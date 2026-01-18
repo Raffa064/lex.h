@@ -5,7 +5,6 @@
  *  The lexer initialization actually checks for undefines types.
  */
 
-
 enum {
   TYPE_A,     // = 0
   TYPE_B,     // = 1

@@ -4,6 +4,7 @@
 #ifndef lex_H
 #define lex_H
 
+
 #define LEX_VERSION 1
 
 /*
@@ -14,18 +15,31 @@
  *
  *
  * PRE-INCLUDE OPTIONS:
- *  - LEX_IMPLEMENTATION            Necessary to export lex.h implementations as it is a single-header library.
- *  - LEX_STRIP_PREFIX              It will #define all library symbols without 'lex_' prefix.
- *  - LEX_TYPE_NAME_OFFSET          Can be used to strip type name prefix (read more about on it's definition).
- *  - LEX_DISABLE_BUILTIN_RULES     Disables all builtin rules (use it if you wanna implement everything by yourself).
+ * - LEX_IMPLEMENTATION             Required to emit the implementation when using 'lex.h' as it is a single-header library.
+ * - LEX_STRIP_PREFIX               It will '#define' all library symbols without 'lex_' prefix.
+ * - LEX_TYPE_NAME_OFFSET           Can be used to strip type name prefix (read more about on it's definition).
+ * - LEX_DISABLE_BUILTIN_RULES      Disables all builtin rules (use it if you wanna implement everything by yourself).
+ * - LEX_PROFILER                   Enable profiling will expose implemenmtaion for 'lex_print_profiler', which can be used to print information about lex execution.
  */
 
-#include <asm-generic/errno-base.h>
-#include <assert.h>
-#include <errno.h>
+/// INCLUDES
+
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> 
 #include <stdbool.h>
+#include <errno.h>
+#include <stdint.h>
+
+#ifdef LEX_PROFILER
+#include <bits/time.h>
+#include <time.h>
+#endif
+
+#ifdef LEX_IMPLEMENTATION
+#include <ctype.h>
+#include <stddef.h>
+#include <string.h>
+#endif
 
 /// MACROS
 
@@ -167,10 +181,21 @@ typedef struct {
   bool skip;  
 } LexTypeOptions;
 
+#ifdef LEX_PROFILER
+typedef struct {
+  uint64_t n_time;
+  int call_count;
+} LexProfileData;
+#endif
+
 typedef struct {
   const char* name;
   LexerRule rule;
   LexTypeOptions opt;
+
+#ifdef LEX_PROFILER
+  LexProfileData profile_data;
+#endif
 } LexType;
 
 typedef struct {
@@ -383,8 +408,23 @@ LEX_INLINE void lex_curmove(LexCursor *cursor, ssize_t N);
 void lex_print_hl(Lex l, bool print_caption);
 
 
-// TODO
+/*
+ * It will print all type names in a sianlge line
+ */
 void lex_print_types(Lex l);
+
+#ifdef LEX_PROFILER
+/*
+ * Prints information about lex execution.
+ * It is intent to be called after tokenization, but you can also print during tokenization if you want to.
+ */
+void lex_print_profiler(Lex l);
+#else 
+/*
+ * When LEX_PROFILER is not defined the implementation is gone, so it does nothing
+ */
+#define lex_print_profiler(l) 
+#endif
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
 /*
@@ -451,10 +491,6 @@ LEX_INLINE size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
 
 #ifdef LEX_IMPLEMENTATION
 
-#include <ctype.h>
-#include <stddef.h>
-#include <string.h>
-
 Lex lex_init(LexTypeArray types, const char* source) {
   LexType unset = {0};
 
@@ -493,7 +529,24 @@ bool lex_current(Lex* l, LexResult* result) {
 
   for (LexTypeIndex id = 0; id < l->types.count; id++) {
     LexType tkdef = l->types.items[id];
+    
+    #ifdef LEX_PROFILER
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     size_t len = tkdef.rule(cursor);
+    
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    uint64_t time = (end.tv_sec - start.tv_sec) * 1000000000L
+                  + end.tv_nsec - start.tv_nsec;
+    
+    l->types.items[id].profile_data.n_time += time;
+    l->types.items[id].profile_data.call_count++;
+    #else
+    size_t len = tkdef.rule(cursor);
+    #endif
 
     if (len != LEX_NO_MATCH) {
       cursor.length = len;
@@ -753,6 +806,39 @@ void lex_print_types(Lex l) {
   printf("\n");
 }
 
+#ifdef LEX_PROFILER
+void lex_print_profiler(Lex l) {
+  uint64_t total_time_ns = 0;
+  int total_call = 0;
+  uint64_t total_avg = 0;
+  
+  printf("\e[7;37m[ %-20s | %-20s | %-20s | %-20s ]\e[0m\n", "Type", "Time (ns)", "Call count", "Avg (ns/call)");
+  for (int i = 0; i < l.types.count; i++) {
+    LexType type = l.types.items[i];
+
+    uint64_t time_ns = type.profile_data.n_time;
+    int call_count = type.profile_data.call_count;
+    uint64_t avg = call_count? (time_ns / call_count) : -1;
+
+    printf("[ %-20s | %-20lu | %-20d | %-20lu ]\n", type.name, time_ns, call_count, avg);
+
+    total_time_ns += time_ns;
+    total_call += call_count;
+    total_avg += avg;
+  }
+
+  
+  double total_time_ms = total_time_ns / 1e6;
+  double total_avg_ms = total_avg / 1e6;
+  printf("\n");
+  printf("%-20s: %lu\n", "Total time (ns)", total_time_ns); 
+  printf("%-20s: %d\n", "Calls", total_call);
+  printf("%-20s: %lu\n", "Avg. call time (ns)", total_avg);
+  printf("%-20s: time: %fms  avg: %f ms/call\n", "Human readable", total_time_ms, total_avg_ms);
+}
+#endif
+
+
 #ifndef LEX_DISABLE_BUILTIN_RULES
 
 size_t lex_builtin_rule_ws(LexCursor cursor) { 
@@ -884,6 +970,7 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define curmove lex_curmove
 #define print_hl lex_print_hl
 #define print_types lex_print_types
+#define print_profiler lex_print_profiler
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
 #define builtin_rule_ws lex_builtin_rule_ws
