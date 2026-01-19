@@ -1,5 +1,5 @@
 // ----------------- lex.h | made by Raffa064 --------------------
-// Check out for new versions at http://github;com/Raffa064/lex.h
+// Check out for new versions at https://github.com/Raffa064/lex.h
 
 #ifndef lex_H
 #define lex_H
@@ -10,7 +10,7 @@
 /*
  * ABOUT
  *
- * lex.h is a minimal sigle-header lexer library, designed to be fast, and readable.
+ * lex.h is a minimal sigle-header lexer library, designed to be fast and readable.
  * The library could be entirely stack allocated without needing for heap allocation.
  *
  *
@@ -19,7 +19,7 @@
  * - LEX_STRIP_PREFIX               It will '#define' all library symbols without 'lex_' prefix.
  * - LEX_TYPE_NAME_OFFSET           Can be used to strip type name prefix (read more about on it's definition).
  * - LEX_DISABLE_BUILTIN_RULES      Disables all builtin rules (use it if you wanna implement everything by yourself).
- * - LEX_PROFILER                   Enable profiling will expose implemenmtaion for 'lex_print_profiler', which can be used to print information about lex execution.
+ * - LEX_PROFILER                   Enable profiling will expose implementation for 'lex_print_profiler', which can be used to print information about lex execution.
  */
 
 /// INCLUDES
@@ -67,7 +67,7 @@
  * If you need to use it in another context, use LEX_ETYPE instead.
  *
  * 'id' is expected to be global or local int type variable, where it's value 
- * will be the index* of the defined type inside the array, and the it's 
+ * will be the index* of the defined type inside the array, and it's 
  * name will be stored literally as it is, as the name** for this token.
  *
  * (*): The index determines the order of execution for the matching, so 
@@ -107,7 +107,7 @@
   }
 
 /*
- * These two macros doesn't do a lot things, it's intent is all about legibility.
+ * These two macros doesn't do a lot of things, it's intent is all about legibility.
  * Use it to create and merge branches (which are just independent copies of the lexer) 
  * in order to creating complex parsers.
  */
