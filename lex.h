@@ -150,13 +150,16 @@
  */
 #define lex_curend(cursor) ((size_t)(cursor.index + cursor.length))
 
+#define lex_view(lexer, index) ((const char*) lexer.cursor.source + index)
+
 /*
  * You can use this while creating 'rule functions' to indicate non matching cases.
  */
 #define LEX_NO_MATCH 0
 
 #ifdef LEX_IMPLEMENTATION
-#define LEX_INLINE inline
+// Inline only for implementation prevents warnings
+#define LEX_INLINE inline 
 #else
 #define LEX_INLINE
 #endif
@@ -168,7 +171,7 @@ typedef struct {
 } LexCursorPosition; 
 
 typedef struct {
-  const char* source;
+  const char *restrict source;
   size_t index, length;
 } LexCursor;
 
@@ -198,12 +201,13 @@ typedef struct {
 #endif
 } LexType;
 
+typedef size_t LexTypeIndex;
+
 typedef struct {
   LexType *items;
-  size_t count;
+  LexTypeIndex count;
 } LexTypeArray;
 
-typedef int LexTypeIndex;
 
 typedef struct {
   LexCursor cursor;
@@ -331,10 +335,20 @@ size_t lex_match_keyword(LexCursor cursor, const char* keyword);
  * If 'can_be_scaped' is set, it will allows the occurrency of 'delimiter' inside the match 
  * if it's preceeded by '\'.
  *
+ * For expanding for multiple lines, use 'multiline' option.
+ *
  * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
  */
+size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped, bool multiline);
 
-size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped);
+/*
+ * Utilitary function for matching a region that starts with some prefix, and ends with some suffix.
+ *
+ * For expanding for multiple lines, use 'multiline' option.
+ *
+ * NOTE: If 'optional_suffix' is set, it will match to the end of file when sufix is not found.
+ */
+size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix, bool multiline);
 
 /*
  * Utilitary function for exact matching.
@@ -352,11 +366,10 @@ size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len);
 LEX_INLINE size_t lex_match_exact(LexCursor cursor, const char* match);
 
 /*
- * Utilitary function for matching a region that starts with some prefix, and ends with some suffix.
- *
- * NOTE: If 'optional_suffix' is set, it will match to the end of file when sufix is not found.
+ * Matches input chas with [a-zA-Z$_] or [a-zA-Z$_0-9] depending on 'allow_numbers'.
+ * This functions is used internally by 'lex_builtin_rule_id' and 'lex_match_keyword'. 
  */
-size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix);
+LEX_INLINE bool lex_idchar(char ch, bool allow_numbers); 
 
 /*
   * Copy token string value to a internal static buffer.
@@ -399,6 +412,26 @@ LEX_INLINE LexCursorPosition lex_curpos(LexCursor cursor);
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
  */
 LEX_INLINE void lex_curmove(LexCursor *cursor, ssize_t N);
+
+/*
+ * Returns the index for the begining of the line where the cursor is.
+ */
+size_t lex_curline_start(LexCursor cursor); 
+
+/*
+ * Returng the index for the end of the line where the cursor is.
+ */
+size_t lex_curline_end(LexCursor cursor);
+
+
+/*
+ * This function returns the color code for the given type.
+ *
+ * Actually, it has a limited amout of colors and styles which rotates when it overflows.
+ *
+ * The returned string is a internal static memory, that should not be stored. 
+ */
+const char * lex_print_style(LexTypeIndex type);
 
 /*
  * Print source code to the console, colorizing diferent tokens.
@@ -641,7 +674,7 @@ size_t lex_match_keywordn(LexCursor cursor, const char* keyword, size_t len) {
   if (strncmp(str, keyword, len) == 0) {
     char lookahead = str[len];
 
-    if (isalnum(lookahead)) // boundary check: prevent cases like 'interrupt' to be split into 'int' 'errupt' (keyword/id)
+    if (lex_idchar(lookahead, true)) // boundary check: prevent cases like 'interrupt' to be split into 'int' 'errupt' (keyword/id)
       return LEX_NO_MATCH;
 
     return len;
@@ -654,11 +687,15 @@ size_t lex_match_keyword(LexCursor cursor, const char* keyword) {
   return lex_match_keywordn(cursor, keyword, strlen(keyword));
 }
 
-size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped) {
+size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped, bool multiline) {
   const char *str = lex_curstr(cursor);
   
   if (str[0] == delimiter) {
     for (size_t len = 1; str[len] != '\0'; len++) {
+      if (!multiline && str[len] == '\n') {
+        return LEX_NO_MATCH; // probably a broken match, like an unterminatted string
+      }
+
       if (str[len] == delimiter) {
         if (can_be_scaped) {
           if (str[len - 1] == '\\')  // ignore scaped delimiter
@@ -673,20 +710,7 @@ size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_sca
   return LEX_NO_MATCH;
 }
 
-size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len) {
-  const char *str = lex_curstr(cursor);
-
-  if (strncmp(str, match, len) == 0)
-    return len;
-
-  return LEX_NO_MATCH;
-}
-
-size_t lex_match_exact(LexCursor cursor, const char* match) {
-  return lex_match_exactn(cursor, match, strlen(match));
-}
-
-size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix) {
+size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix, bool multiline) {
   size_t prefix_len = strlen(prefix);
   size_t suffix_len = strlen(suffix);
 
@@ -701,6 +725,10 @@ size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix
         found_suffix = true;
         break;
       }
+
+      if (!multiline && lex_curch(cur) == '\n') {
+        return LEX_NO_MATCH; // probably a broken match, like an unterminatted string
+      }
       
       lex_curmove(&cur, 1);
     }
@@ -712,6 +740,20 @@ size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix
   }
 
   return LEX_NO_MATCH;  
+}
+
+
+size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len) {
+  const char *str = lex_curstr(cursor);
+
+  if (strncmp(str, match, len) == 0)
+    return len;
+
+  return LEX_NO_MATCH;
+}
+
+size_t lex_match_exact(LexCursor cursor, const char* match) {
+  return lex_match_exactn(cursor, match, strlen(match));
 }
 
 const char* lex_tkstr_tmp(LexToken tk) {
@@ -736,23 +778,30 @@ char* lex_tkstr_dup(LexToken tk) {
 }
 
 size_t lex_curcol(LexCursor cursor) {
-  size_t col = 0;
-  for (int i = lex_curstart(cursor) - 1; i >= 0; i--, col++) {
-    if (cursor.source[cursor.index + i] == '\n')
-      return col;
-  }
+  size_t column = 1;
 
-  return col;
+  while (cursor.index > 0) {
+    lex_curmove(&cursor, -1);
+    
+    if (lex_curch(cursor) == '\n')
+      break;      
+
+    column++;
+  }
+  
+  return column;
 }
 
 size_t lex_curline(LexCursor cursor) {
-  size_t lines = 1;
-  for (int i = 0; i < lex_curstart(cursor); i++) {
-    if (cursor.source[i] == '\n')
-      lines++;
+  size_t lineno = 1;
+  while(cursor.index > 0) {
+    lex_curmove(&cursor, -1);
+    
+    if (lex_curch(cursor) == '\n')
+      lineno++;
   }
 
-  return lines;
+  return lineno;
 }
 
 void lex_curreset(LexCursor *cursor) {
@@ -760,9 +809,38 @@ void lex_curreset(LexCursor *cursor) {
 }
 
 LexCursorPosition lex_curpos(LexCursor cursor) {
+  size_t lineno = 1;
+  size_t column = 1;
+
+  LexCursor l = cursor, c = cursor;
+
+  bool l_stop = true; 
+  bool c_stop = true;
+  do {
+    l_stop &= l.index > 0;
+    c_stop &= c.index > 0;
+
+    if (l_stop) {
+      lex_curmove(&l, -1);
+      if (lex_curch(l) == '\n')
+        lineno++;
+    }
+
+    if (c_stop) {
+      lex_curmove(&c, -1);
+
+      if (lex_curch(c) != '\n') {
+        column++;
+      } else c_stop = false;
+    }
+
+    if (!(l_stop || c_stop))
+      break;
+  } while(1);
+
   return (LexCursorPosition) { 
-    .lineno = lex_curline(cursor), 
-    .column = lex_curcol(cursor),
+    .lineno = lineno, 
+    .column = column,
   };
 }
 
@@ -770,29 +848,58 @@ void lex_curmove(LexCursor *cursor, ssize_t N) {
   cursor->index += N;
 }
 
-void lex_print_hl(Lex l, bool print_labels) {
-  // It has 42 different highlights
-  static const int colors[] = { 31, 32, 33, 34, 35, 36, 37 };
+size_t lex_curline_start(LexCursor cursor) {
+  while (cursor.index > 0 && lex_curch(cursor) != '\n')
+    lex_curmove(&cursor, -1);
+
+  return cursor.index + 1;
+}
+
+size_t lex_curline_end(LexCursor cursor) {
+  while (lex_curch(cursor) != '\0' && lex_curch(cursor) != '\n')
+    lex_curmove(&cursor, 1);
+
+  return cursor.index;
+}
+
+const char* lex_print_style(LexTypeIndex type) {
+  // It has 36 different highlights
+  static const int colors[] = { 34, 37, 35, 36, 32, 33, }; // red only for erros
   static const int styles[] = { 0, 1, 3, 4, 7, 9 };
 
+  const int color_count = sizeof(colors) / sizeof(int);
+  const int style_count = sizeof(styles) / sizeof(int);
+
+  uint8_t st = (type / color_count) % style_count;
+  uint8_t fg = type % color_count;
+
+  static char buf[8]; // "\e[0;34m" -> '\e' '[' '0' ';' '3' '4' 'm' '\0' (8 chars)
+  sprintf(buf, "\e[%1u;%2um", styles[st], colors[fg]);
+
+  return buf;
+}
+
+void lex_print_hl(Lex l, bool print_labels) {
   lex_curreset(&l.cursor); // return to begining of file
   l.no_skip = true;
 
-  while (lex_current(&l, NULL)) {
-    int s = styles[l.tk.id / 6];
-    int c = colors[l.tk.id % 7];
-    
-    printf("\e[%d;%dm%.*s", s, c, (int)lex_tklen(l.tk), lex_tkstr(l.tk));
+  LexResult result;
+  while (lex_current(&l, &result)) {
+    LexCursorPosition pos = lex_curpos(l.cursor);
+    printf("%s%s", lex_print_style(l.tk.id),  lex_tkstr_tmp(l.tk));
     lex_move(&l);
+  }
+
+  if (result == LEX_INVALID_TOKEN) {
+    printf("\e[30;41m%c <-- Invalid token \e[0m", lex_curch(l.cursor));
   }
 
   printf("\e[0m\n");
 
   if (print_labels) {
-    for (int  i = 0; i < l.types.count; i++) {
-      int s = styles[i / 6];
-      int c = colors[i % 7];
-      printf("\e[%d;%dm%s ", s, c, l.types.items[i].name);
+    printf("Token Types:\n\t");
+    for (LexTypeIndex i = 0; i < l.types.count; i++) {
+      printf("%s%s ", lex_print_style(i), l.types.items[i].name);
     }
     
     printf("\e[0m\n");
@@ -810,7 +917,6 @@ void lex_print_types(Lex l) {
 void lex_print_profiler(Lex l) {
   uint64_t total_time_ns = 0;
   int total_call = 0;
-  uint64_t total_avg = 0;
   
   printf("\e[7;37m[ %-20s | %-20s | %-20s | %-20s ]\e[0m\n", "Type", "Time (ns)", "Call count", "Avg (ns/call)");
   for (int i = 0; i < l.types.count; i++) {
@@ -824,10 +930,9 @@ void lex_print_profiler(Lex l) {
 
     total_time_ns += time_ns;
     total_call += call_count;
-    total_avg += avg;
   }
 
-  
+  uint64_t total_avg = total_time_ns / total_call;
   double total_time_ms = total_time_ns / 1e6;
   double total_avg_ms = total_avg / 1e6;
   printf("\n");
@@ -854,12 +959,21 @@ size_t lex_builtin_rule_ws(LexCursor cursor) {
   return len; 
 }
 
+bool lex_idchar(char ch, bool allow_numbers) {
+  return isalpha(ch) 
+      || ch == '$' 
+      || ch == '_' 
+      || (allow_numbers && isdigit(ch))
+      ;
+}
+
 size_t lex_builtin_rule_id(LexCursor cursor) {
   const char *start = lex_curstr(cursor);
-  if (isalpha(*start) || *start == '$' || *start == '_') {
+
+  if (lex_idchar(*start, false)) {
     for (int len = 1; start[len] != '\0'; len++) {
       char ch = start[len];
-      if (isalnum(ch) || ch == '$' || ch == '_')
+      if (lex_idchar(ch, true))
         continue;
 
       return len;
@@ -870,35 +984,35 @@ size_t lex_builtin_rule_id(LexCursor cursor) {
 }
 
 size_t lex_builtin_rule_dqstring(LexCursor cursor) {
-  return lex_match_wrapped(cursor, '"', true);
+  return lex_match_wrapped(cursor, '"', true, false);
 }
 
 size_t lex_builtin_rule_sqstring(LexCursor cursor) {
-  return lex_match_wrapped(cursor, '\'', true);
+  return lex_match_wrapped(cursor, '\'', true, false);
 }
 
 size_t lex_builtin_rule_string(LexCursor cursor) {
-  size_t len = lex_match_wrapped(cursor, '"', true);
+  size_t len = lex_match_wrapped(cursor, '"', true, false);
   if (len != LEX_NO_MATCH)
     return len;
 
-  return lex_match_wrapped(cursor, '\'', true);
+  return lex_match_wrapped(cursor, '\'', true, false);
 }
 
 size_t lex_builtin_rule_pylike_comment(LexCursor cursor) {
-  return lex_match_region(cursor, "#", "\n", true);
+  return lex_match_region(cursor, "#", "\n", true, false);
 }
 
 size_t lex_builtin_rule_asmlike_comment(LexCursor cursor) {
-  return lex_match_region(cursor, ";", "\n", true);
+  return lex_match_region(cursor, ";", "\n", true, false);
 }
 
 size_t lex_builtin_rule_clike_comment(LexCursor cursor) {
-  return lex_match_region(cursor, "//", "\n", true);
+  return lex_match_region(cursor, "//", "\n", true, false);
 }
 
 size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
-  return lex_match_region(cursor, "/*", "*/", false);
+  return lex_match_region(cursor, "/*", "*/", false, true);
 }
 
 #endif

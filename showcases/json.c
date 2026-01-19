@@ -1,10 +1,14 @@
 /*
  * Minimal JSON lexer.
+ *
+ * This showcases is an example of use for lex profiler and debug-highligher.
  * 
  * Run with: `make run SHOWCASE=json.c`
  */
 
 #include <stdio.h>
+
+#define LEX_PROFILER // Enabled profiler
 
 #define LEX_TYPE_NAME_OFFSET 3 // Remove "JT_" prefix from token names
 #define LEX_IMPLEMENTATION
@@ -43,25 +47,9 @@ int main() {
 
   lex_print_hl(lex, true);
 
-  LexResult result;
-  while (lex_current(&lex, &result)) {
-    printf("Token: %s '%s'\n", lex_tkname(lex, lex.tk), lex_tkstr_tmp(lex.tk));
-
-    lex_move(&lex);
-  }
-
-  if (result == LEX_INVALID_TOKEN) {
-    fprintf(stderr, 
-      "\e[31mErro: (%2zu:%2zu) '%s'\e[0m\n", 
-      lex_curline(lex.cursor), 
-      lex_curcol(lex.cursor), 
-      lex_curstr(lex.cursor)
-    );
-
-    return 1;
-  }
-
-  lex_print_profiler(lex);
+  printf("\n");
+  
+  lex_print_profiler(lex); 
 
   return 0;
 }
