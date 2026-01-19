@@ -166,5 +166,5 @@ int main() {
     "DA DB DC DD DE DF DG DH DI DJ DK DL DM DN DO DP DQ DR DS DT DU DV DW DX DY DZ\n"
   );
 
-  lex_print_hl(abboba, true);
+  lex_print_hl(abboba, false);
 }

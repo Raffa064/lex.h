@@ -4,10 +4,11 @@
  * Run with: `make run SHOWCASE=bf.c`
  */
 
-#include <stdio.h>
 #define LEX_IMPLEMENTATION
 #include "../lex.h"
 #include <stdlib.h>
+#include <assert.h>
+#include <stdio.h>
 
 enum {
   BF_WS,             // 

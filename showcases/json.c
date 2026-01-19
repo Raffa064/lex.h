@@ -47,7 +47,27 @@ int main() {
 
   lex_print_hl(lex, true);
 
-  printf("\n");
+  LexResult result;
+  while (lex_current(&lex, &result)) {
+    printf("Token: %s '%s'\n", lex_tkname(lex, lex.tk), lex_tkstr_tmp(lex.tk));
+    lex_move(&lex);
+  }
+
+  if (result == LEX_INVALID_TOKEN) {
+    size_t start = lex_curline_start(lex.cursor);
+    size_t end   = lex_curline_end(lex.cursor);
+   
+    fprintf(stderr, 
+      "\e[31mErro: at %zu:%zu near '%.*s'\e[0m\n", 
+      lex_curline(lex.cursor), 
+      lex_curcol(lex.cursor), 
+      (int) (end - start), 
+      lex_view(lex, start)
+    );
+
+    return 1;
+  }
+
   
   lex_print_profiler(lex); 
 

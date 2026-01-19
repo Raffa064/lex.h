@@ -4,6 +4,7 @@
 #ifndef lex_H
 #define lex_H
 
+#define LEX_PROFILER 
 
 #define LEX_VERSION 1
 
@@ -111,8 +112,8 @@
  * Use it to create and merge branches (which are just independent copies of the lexer) 
  * in order to creating complex parsers.
  */
-#define LEX_BRANCH(l_ptr) (*l)                  // Ex: Lex b = LEX_BRANCH(l);   // Create a branch of l (which is a pointer)
-#define LEX_MERGE_BRANCH(l_ptr, b) *l_ptr = b;  // Ex: LEX_MERGE_BRANCH(l, b);  // Apply changes from b into l
+#define LEX_BRANCH(l_ptr) *(l_ptr)                  // Ex: Lex b = LEX_BRANCH(l);   // Create a branch of l (which is a pointer)
+#define LEX_MERGE_BRANCH(l_ptr, b) *(l_ptr) = (b);  // Ex: LEX_MERGE_BRANCH(l, b);  // Apply changes from b into l
 
 /*
  * Returns a pointer to the start of the token on the source code.
@@ -166,6 +167,43 @@
 
 /// STRUCTURES
 
+typedef struct Lex Lex;
+
+#ifdef LEX_PROFILER
+typedef struct {
+  uint64_t n_time;
+  int call_count;
+} LexType_ProfileData;
+
+typedef struct {
+  Lex* root;
+
+  int branch_count;
+  int merge_count;
+
+  struct {
+    int call_count;
+    int dummy_calls;   
+    int skipped_calls;
+  } lex_current;
+
+  struct {
+    int call_count;
+    int sucess_cout;
+  } lex_consume, lex_skip;
+} Lex_ProfileData;
+
+#undef LEX_BRANCH
+#define LEX_BRANCH(l_ptr) __lex_profiler_branch_wrapper(l_ptr);
+
+#undef LEX_MERGE_BRANCH
+#define LEX_MERGE_BRANCH(l_ptr, b) __lex_profiler_merge_branch_wrapper(l_ptr, b);
+
+Lex __lex_profiler_branch_wrapper(Lex* l_ptr);
+void __lex_profiler_merge_branch_wrapper(Lex* l_ptr, Lex b);
+
+#endif
+
 typedef struct {
   size_t lineno, column;
 } LexCursorPosition; 
@@ -184,20 +222,13 @@ typedef struct {
   bool skip;  
 } LexTypeOptions;
 
-#ifdef LEX_PROFILER
-typedef struct {
-  uint64_t n_time;
-  int call_count;
-} LexProfileData;
-#endif
-
 typedef struct {
   const char* name;
   LexerRule rule;
   LexTypeOptions opt;
 
 #ifdef LEX_PROFILER
-  LexProfileData profile_data;
+  LexType_ProfileData profile_data;
 #endif
 } LexType;
 
@@ -208,19 +239,22 @@ typedef struct {
   LexTypeIndex count;
 } LexTypeArray;
 
-
 typedef struct {
   LexCursor cursor;
   LexTypeIndex id;
 } LexToken;
 
-typedef struct {
+struct Lex {
   LexTypeArray types;
   LexCursor cursor;
   LexToken tk;
   bool has_token;  
   bool no_skip;     // Used to ignore TypeOptions.skip flag
-} Lex;
+
+#ifdef LEX_PROFILER
+  Lex_ProfileData profiler_data;
+#endif
+};
 
 /* 
  * LEX_INVALID_TOKEN:
@@ -544,10 +578,17 @@ Lex lex_init(LexTypeArray types, const char* source) {
 }
 
 bool lex_current(Lex* l, LexResult* result) {
+#ifdef LEX_PROFILER
+    l->profiler_data.lex_current.call_count++;
+#endif
+
   if (l->has_token) {
     if (result)
       *result = LEX_SUCESS;
 
+#ifdef LEX_PROFILER
+    l->profiler_data.lex_current.dummy_calls++;
+#endif
     return true;
   }
 
@@ -563,7 +604,7 @@ bool lex_current(Lex* l, LexResult* result) {
   for (LexTypeIndex id = 0; id < l->types.count; id++) {
     LexType tkdef = l->types.items[id];
     
-    #ifdef LEX_PROFILER
+#ifdef LEX_PROFILER
     struct timespec start;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
@@ -577,9 +618,9 @@ bool lex_current(Lex* l, LexResult* result) {
     
     l->types.items[id].profile_data.n_time += time;
     l->types.items[id].profile_data.call_count++;
-    #else
+#else
     size_t len = tkdef.rule(cursor);
-    #endif
+#endif
 
     if (len != LEX_NO_MATCH) {
       cursor.length = len;
@@ -592,6 +633,9 @@ bool lex_current(Lex* l, LexResult* result) {
       l->has_token = true;
 
       if (!l->no_skip && l->types.items[id].opt.skip) {
+#ifdef LEX_PROFILER
+        l->profiler_data.lex_current.skipped_calls++;
+#endif
         lex_move(l);
         return lex_current(l, result);
       }
@@ -611,12 +655,20 @@ bool lex_current(Lex* l, LexResult* result) {
  
 
 bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id) { 
+#ifdef LEX_PROFILER
+  l->profiler_data.lex_consume.call_count++;
+#endif
+
   if (lex_current(l, NULL)) {
     if (l->tk.id == id) {
       if (tk)
         *tk = l->tk;
 
       lex_move(l);
+
+#ifdef LEX_PROFILER
+      l->profiler_data.lex_consume.sucess_cout++;
+#endif
       return true;
     }
   }
@@ -625,12 +677,19 @@ bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id) {
 }
 
 bool lex_skipn(Lex* l, LexTypeIndex id, const char* match, size_t match_len) {
+#ifdef LEX_PROFILER
+  l->profiler_data.lex_skip.call_count++;
+#endif
   Lex b = LEX_BRANCH(l);
 
   LexToken tk;
   if (lex_consume(&b, &tk, id)) {
     if (lex_tklen(b.tk) == match_len && strncmp(lex_tkstr(tk), match, match_len) == 0) {
       LEX_MERGE_BRANCH(l, b);
+      
+#ifdef LEX_PROFILER
+      l->profiler_data.lex_skip.sucess_cout++;
+#endif
       return true;
     }
   }
@@ -885,7 +944,6 @@ void lex_print_hl(Lex l, bool print_labels) {
 
   LexResult result;
   while (lex_current(&l, &result)) {
-    LexCursorPosition pos = lex_curpos(l.cursor);
     printf("%s%s", lex_print_style(l.tk.id),  lex_tkstr_tmp(l.tk));
     lex_move(&l);
   }
@@ -907,39 +965,88 @@ void lex_print_hl(Lex l, bool print_labels) {
 }
 
 void lex_print_types(Lex l) {
-  for (int  i = 0; i < l.types.count; i++) {
+  for (int  i = 0; i < l.types.count; i++)
     printf("%s ", l.types.items[i].name);
-  }
   printf("\n");
 }
 
 #ifdef LEX_PROFILER
-void lex_print_profiler(Lex l) {
-  uint64_t total_time_ns = 0;
-  int total_call = 0;
-  
-  printf("\e[7;37m[ %-20s | %-20s | %-20s | %-20s ]\e[0m\n", "Type", "Time (ns)", "Call count", "Avg (ns/call)");
-  for (int i = 0; i < l.types.count; i++) {
-    LexType type = l.types.items[i];
 
-    uint64_t time_ns = type.profile_data.n_time;
-    int call_count = type.profile_data.call_count;
-    uint64_t avg = call_count? (time_ns / call_count) : -1;
-
-    printf("[ %-20s | %-20lu | %-20d | %-20lu ]\n", type.name, time_ns, call_count, avg);
-
-    total_time_ns += time_ns;
-    total_call += call_count;
+Lex __lex_profiler_branch_wrapper(Lex* l_ptr) {
+  Lex b = *l_ptr;
+  if (l_ptr->profiler_data.root == NULL) {
+    b.profiler_data.root = l_ptr;
   }
 
-  uint64_t total_avg = total_time_ns / total_call;
-  double total_time_ms = total_time_ns / 1e6;
-  double total_avg_ms = total_avg / 1e6;
-  printf("\n");
-  printf("%-20s: %lu\n", "Total time (ns)", total_time_ns); 
-  printf("%-20s: %d\n", "Calls", total_call);
-  printf("%-20s: %lu\n", "Avg. call time (ns)", total_avg);
-  printf("%-20s: time: %fms  avg: %f ms/call\n", "Human readable", total_time_ms, total_avg_ms);
+  b.profiler_data.root->profiler_data.branch_count++;
+
+  return b;  
+}
+
+void __lex_profiler_merge_branch_wrapper(Lex* l_ptr, Lex b) {
+  b.profiler_data.root->profiler_data.merge_count++;
+
+  Lex_ProfileData l_data = b.profiler_data;
+  if (l_ptr == b.profiler_data.root) {
+    l_data = l_ptr->profiler_data;
+  }
+
+  *l_ptr = b;
+  l_ptr->profiler_data = l_data;
+}
+
+void lex_print_profiler(Lex l) {
+  printf("\n\e[7;37m[ Lex Profiler ]\e[0m\n");
+  
+  printf("%-25s: %d\n", "Branch count:", l.profiler_data.branch_count);
+  printf("%-25s: %d\n", "   Merged branchs:", l.profiler_data.merge_count);
+
+  typeof(l.profiler_data.lex_current) lcurrent = l.profiler_data.lex_current;
+  printf("%-25s: %d\n", "Calls to 'lex_current'", lcurrent.call_count); 
+  printf("%-25s: %d\n", "  Dummy calls:", lcurrent.dummy_calls);
+  printf("%-25s: %d\n", "  Skipped calls:",lcurrent.skipped_calls);
+  printf("%-25s: %d/%d\n", "  Total wast:", lcurrent.dummy_calls + lcurrent.skipped_calls, lcurrent.call_count);
+
+  typeof(l.profiler_data.lex_consume) lconsume = l.profiler_data.lex_consume;
+  printf("%-25s: %d\n", "Calls to 'lex_consume'", lconsume.call_count); 
+  printf("%-25s: %d\n", "  Sucess count:", lconsume.sucess_cout);
+
+  typeof(l.profiler_data.lex_skip) lskip = l.profiler_data.lex_skip;
+  printf("%-25s: %d\n", "Calls to 'lex_skip'", lskip.call_count); 
+  printf("%-25s: %d\n", "  Sucess count:", lskip.sucess_cout);
+
+  printf("\nToken matching:\n");
+
+  if (l.profiler_data.lex_current.call_count > 0) {
+    uint64_t total_time_ns = 0;
+    int total_call = 0; 
+    printf("  %-20s %-20s %-20s %-20s\n", "Type", "Time (ns)", "Call count", "Avg (ns/call)");
+    for (int i = 0; i < l.types.count; i++) {
+      LexType type = l.types.items[i];
+
+      uint64_t time_ns = type.profile_data.n_time;
+      int call_count = type.profile_data.call_count;
+      uint64_t avg = call_count? (time_ns / call_count) : -1;
+
+      printf("  %-20s %-20lu %-20d %-20lu\n", type.name, time_ns, call_count, avg);
+
+      total_time_ns += time_ns;
+      total_call += call_count;
+    }
+
+    uint64_t total_avg = total_time_ns / total_call;
+    double total_time_ms = total_time_ns / 1e6;
+    double total_avg_ms = total_avg / 1e6;
+    printf("\n");
+    printf("%-25s: %lu\n", "  Total time (ns)", total_time_ns); 
+    printf("%-25s: %d\n", "  Calls", total_call);
+    printf("%-25s: %lu\n", "  Avg. call time (ns)", total_avg);
+    printf("%-25s: time: %fms  (avg. of %f ms per rule call)\n", "  Human readable", total_time_ms, total_avg_ms);
+
+    printf("\n");
+  } else {
+    printf("  <No calls>\n\n");
+  }
 }
 #endif
 
