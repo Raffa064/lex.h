@@ -3,17 +3,7 @@
 
 ## Showcases
 
-The project has a [showcases directory](https://github.com/Raffa064/lex.h/blob/main/showcases) including some examples, you can use to understand how to work with the library.
-
-- Lexer for a hello world in C
-  - [Standard version](https://github.com/Raffa064/lex.h/blob/main/showcases/c-main-prefix.c)
-  - [No prefix version](https://github.com/Raffa064/lex.h/blob/main/showcases/c-main.c)
-- [Lexer for json](https://github.com/Raffa064/lex.h/blob/main/showcases/json.c)
-- [Brain F*ck interpreter](https://github.com/Raffa064/lex.h/blob/main/showcases/bf.c)
-- [Missing Types Example](https://github.com/Raffa064/lex.h/blob/main/showcases/missing-types.c)
-- Example comparison between `LEX_ETYPES` and `LEX_TYPE`
-  - [implicit-index.c](https://github.com/Raffa064/lex.h/blob/main/showcases/implicit-index.c)
-  - [explicit-index.c](https://github.com/Raffa064/lex.h/blob/main/showcases/explicit-index.c)
+The project has a [showcases directory](https://github.com/Raffa064/lex.h/blob/main/showcases) including some examples. You can use it to understand how to work with the library.
 
 ### Building showcases
 To build and run showcases you should clone this repo, and call `make run` at the project's root directory:
