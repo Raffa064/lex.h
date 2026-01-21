@@ -32,7 +32,6 @@
 #include <stdint.h>
 
 #ifdef LEX_PROFILER
-#include <bits/time.h>
 #include <time.h>
 #endif
 
@@ -108,7 +107,8 @@
   }
 
 /*
- * These two macros doesn't do a lot things, it's intent is all about legibility.
+ * When LEX_PROFILER is set, this macros can be used to track branching operations.
+ * Otherwise, when LEX_PROFILER is not defined, these two macros doesn't do a lot things, but it still being recommend to improve legibility.
  * Use it to create and merge branches (which are just independent copies of the lexer) 
  * in order to creating complex parsers.
  */
@@ -327,6 +327,12 @@ void lex_move_to(Lex* l, LexCursor to);
  * If 'l->has_token' is false, it will do nothing.
  */
 void lex_move(Lex* l);
+
+
+/*
+ * This function returns true when there is a token to be processed, even when it's not a valid token.
+ */
+bool lex_has_next(Lex l);
 
 /*
  * Utilitary function, that can be used to match the char at the current cursor
@@ -714,6 +720,12 @@ void lex_move(Lex* l) {
   }
 }
 
+bool lex_has_next(Lex l) {
+  lex_move(&l);
+  LexResult result;
+  return lex_current(&l, &result) || result == LEX_INVALID_TOKEN;
+}
+
 size_t lex_match_charsn(LexCursor cursor, const char* chars, int count) {
   for (int i = 0; i < count; i++) {
     if (cursor.source[cursor.index] == chars[i])
@@ -954,20 +966,16 @@ void lex_print_hl(Lex l, bool print_labels) {
 
   printf("\e[0m\n");
 
-  if (print_labels) {
-    printf("Token Types:\n\t");
-    for (LexTypeIndex i = 0; i < l.types.count; i++) {
-      printf("%s%s ", lex_print_style(i), l.types.items[i].name);
-    }
-    
-    printf("\e[0m\n");
-  }
+  if (print_labels)
+    lex_print_types(l);
 }
 
 void lex_print_types(Lex l) {
-  for (int  i = 0; i < l.types.count; i++)
-    printf("%s ", l.types.items[i].name);
-  printf("\n");
+  printf("Token Types:\n\t");
+  for (LexTypeIndex i = 0; i < l.types.count; i++)
+    printf("%s%s ", lex_print_style(i), l.types.items[i].name);
+    
+  printf("\e[0m\n");
 }
 
 #ifdef LEX_PROFILER
