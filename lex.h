@@ -1102,6 +1102,9 @@ void lex_repl(LexTypeArray types) {
       lex_print_hl(l, false);
     }
   }
+
+  if (input)
+    free(input);
 }
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
