@@ -486,6 +486,14 @@ void lex_print_hl(Lex l, bool print_caption);
  */
 void lex_print_types(Lex l);
 
+
+/*
+ * It works as an iteractive mode for 'lex_print_hl'.
+ * It will start a shell-like interface where you can input text to be processed by the lexer,
+ * which will print a colorized output, where each color/style applies to a specific type of token.
+ */
+void lex_repl(LexTypeArray types);
+
 #ifdef LEX_PROFILER
 /*
  * Prints information about lex execution.
@@ -1058,6 +1066,43 @@ void lex_print_profiler(Lex l) {
 }
 #endif
 
+
+void lex_repl(LexTypeArray types) {
+  printf("Lex.h Debug REPL v1.0\n\tUse 'h' to show help text, and 'q' to quit.\n");
+
+  char *input = NULL;
+  size_t input_capacity = 0;
+
+  while (!feof(stdin)) {
+    printf(">> "), fflush(stdout);
+
+    ssize_t len = getline(&input, &input_capacity, stdin);
+    if (len > 0) {
+      input[len -1 ] = '\0';
+      
+      Lex l = lex_init(types, input);
+
+      if (strncmp(input, "h", input_capacity) == 0) {
+        printf("You are in the Lex.h Debug REPL.\n");
+        printf("Options:\n");
+        printf("\t'h' Show this help message.\n");
+        printf("\t't' Show lexer types.\n");
+        printf("\t'q' Quit from repl.\n");
+        continue;
+      }
+
+      if (strncmp(input, "t", input_capacity) == 0) {
+        lex_print_types(l);
+        continue;
+      }
+
+      if (strncmp(input, "q", input_capacity) == 0)
+        break;
+  
+      lex_print_hl(l, false);
+    }
+  }
+}
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
 
