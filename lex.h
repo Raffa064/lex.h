@@ -1078,8 +1078,9 @@ void lex_repl(LexTypeArray types) {
 
     ssize_t len = getline(&input, &input_capacity, stdin);
     if (len > 0) {
-      input[len -1 ] = '\0';
-      
+      if (input[len - 1] == '\n')
+        input[len - 1] = '\0';
+
       Lex l = lex_init(types, input);
 
       if (strncmp(input, "h", input_capacity) == 0) {
@@ -1133,14 +1134,15 @@ bool lex_idchar(char ch, bool allow_numbers) {
 size_t lex_builtin_rule_id(LexCursor cursor) {
   const char *start = lex_curstr(cursor);
 
-  if (lex_idchar(*start, false)) {
-    for (int len = 1; start[len] != '\0'; len++) {
+  if (lex_idchar(start[0], false)) {
+    int len = 1;
+    for (; start[len] != '\0'; len++) {
       char ch = start[len];
-      if (lex_idchar(ch, true))
-        continue;
-
-      return len;
+      if (!lex_idchar(ch, true))
+        break;
     }
+
+    return len;
   }
 
   return LEX_NO_MATCH;
