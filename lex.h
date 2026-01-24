@@ -1247,8 +1247,10 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define curline lex_curline
 #define curpos lex_curline
 #define curmove lex_curmove
+#define print_style lex_print_style
 #define print_hl lex_print_hl
 #define print_types lex_print_types
+#define print_repl lex_print_repl
 #define print_profiler lex_print_profiler
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
