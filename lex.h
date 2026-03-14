@@ -1,10 +1,8 @@
 // ----------------- lex.h | made by Raffa064 --------------------
 // Check out for new versions at http://github;com/Raffa064/lex.h
 
-#ifndef lex_H
-#define lex_H
-
-#define LEX_PROFILER 
+#ifndef LEX_H
+#define LEX_H
 
 #define LEX_VERSION 1
 
@@ -39,7 +37,7 @@
 #include <ctype.h>
 #include <stddef.h>
 #include <string.h>
-#endif
+#endif // LEX_IMPLEMENTATION
 
 /// MACROS
 
@@ -59,7 +57,7 @@
  * ...
  */
 #ifndef LEX_TYPE_NAME_OFFSET
-#define LEX_TYPE_NAME_OFFSET 0
+  #define LEX_TYPE_NAME_OFFSET 0
 #endif
 
 /*
@@ -151,6 +149,9 @@
  */
 #define lex_curend(cursor) ((size_t)(cursor.index + cursor.length))
 
+/*
+ * Get immutable pointer for a specific index of the source
+ */
 #define lex_view(lexer, index) ((const char*) lexer.cursor.source + index)
 
 /*
@@ -159,11 +160,11 @@
 #define LEX_NO_MATCH 0
 
 #ifdef LEX_IMPLEMENTATION
-// Inline only for implementation prevents warnings
-#define LEX_INLINE inline 
+  // Inline only for implementation prevents warnings
+  #define LEX_INLINE inline 
 #else
-#define LEX_INLINE
-#endif
+  #define LEX_INLINE
+#endif // LEX_IMPLEMENTATION
 
 /// STRUCTURES
 
@@ -176,21 +177,22 @@ typedef struct {
 } LexType_ProfileData;
 
 typedef struct {
+  int call_count;     // Total call count
+  int dummy_calls;    // Immediate returned calls due to cached results
+  int skipped_calls;  // Number of calls automatically skipped by 'lex_current' (for tokens with .skip flag, like WS and commments)
+  int success_count;  // Number of calls which successfully returns some useful stuff 
+} Lex_ProfilerStats;
+
+typedef struct {
   Lex* root;
 
   int branch_count;
   int merge_count;
-
-  struct {
-    int call_count;
-    int dummy_calls;   
-    int skipped_calls;
-  } lex_current;
-
-  struct {
-    int call_count;
-    int sucess_cout;
-  } lex_consume, lex_skip;
+  
+  // Main function stats
+  Lex_ProfilerStats lex_current;
+  Lex_ProfilerStats lex_consume;
+  Lex_ProfilerStats lex_skip;
 } Lex_ProfileData;
 
 #undef LEX_BRANCH
@@ -202,7 +204,7 @@ typedef struct {
 Lex __lex_profiler_branch_wrapper(Lex* l_ptr);
 void __lex_profiler_merge_branch_wrapper(Lex* l_ptr, Lex b);
 
-#endif
+#endif // LEX_PROFILER
 
 typedef struct {
   size_t lineno, column;
@@ -264,14 +266,14 @@ struct Lex {
  * LEX_EOF:
  * It means that the lexer already reached the end of file.
  *
- * LEX_SUCESS:
- * The lexer sucessfully obtained a token from the current 
+ * LEX_SUCCESS:
+ * The lexer successfully obtained a token from the current 
  * cursor position.
  */
 typedef enum { 
   LEX_INVALID_TOKEN = -1, 
   LEX_EOF = 0,
-  LEX_SUCESS = 1,
+  LEX_SUCCESS = 1,
 } LexResult;
 
 /// FOWARD DECLARATIONS
@@ -285,7 +287,7 @@ Lex lex_init(LexTypeArray types, const char* source);
 
 /*
  * Get a token from the current 'l->cursor' position.
- * The function returns true  whenever it sucessfully obtain 
+ * The function returns true  whenever it successfully obtain 
  * a token, otherwise if it failed or reached the end of file, 
  * the return will be false. As the 'result' paramenter is optional
  * it could be passed as NULL, but if it's not, it will be set to the 
@@ -298,7 +300,7 @@ bool lex_current(Lex* l, LexResult* result);
 /*
  * Matches current token with the given 'id', if it matched, returns true 
  * and set optional parameter 'tk' to consumed token. It will automatically call 
- * for 'lex_move' when it sucessfully matches the desired id, and just return false 
+ * for 'lex_move' when it successfully matches the desired id, and just return false 
  * otherwise.
  */
 bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id);
@@ -449,6 +451,11 @@ LEX_INLINE void lex_curreset(LexCursor *cursor);
 LEX_INLINE LexCursorPosition lex_curpos(LexCursor cursor);
 
 /*
+ * Returns a tmp string for the cursor position in the format "<line>:<column" (Ex: "64:3")
+ */
+const char* lex_curpos_str(LexCursor cursor);
+
+/*
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
  */
 LEX_INLINE void lex_curmove(LexCursor *cursor, ssize_t N);
@@ -504,8 +511,8 @@ void lex_print_profiler(Lex l);
 /*
  * When LEX_PROFILER is not defined the implementation is gone, so it does nothing
  */
-#define lex_print_profiler(l) 
-#endif
+#define lex_print_profiler(l) ;
+#endif // LEX_PROFILER
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
 /*
@@ -516,6 +523,16 @@ void lex_print_profiler(Lex l);
 size_t lex_builtin_rule_ws(LexCursor cursor);
 
 /*
+ * Matches input char with [a-Z_$] (could optionally match with numbers too)
+ */
+bool lex_idchar(char ch, bool allow_numbers);
+
+/*
+ * Matches input char with [a-Z_$\-] (could optionally match with numbers too)
+ */
+bool lex_idchar_kebab(char ch, bool allow_numbers);
+
+/*
  * Built-in rule for Identifiers following the most common pattern found on modern languages,
  * useful for user defined names (such as variables and class names).
  * The same as [a-zA-Z$_][a-zA-Z$_0-9]*
@@ -523,6 +540,11 @@ size_t lex_builtin_rule_ws(LexCursor cursor);
  * prevent it to override other token types. 
  */
 size_t lex_builtin_rule_id(LexCursor cursor);
+
+/*
+ * Same as lex_builtin_rule_id, but allwoing kabab-case. Ex: "this-is-an-kebab-id"
+ */
+size_t lex_builtin_rule_id_kebab(LexCursor cursor);
 
 /*
  * Built-in rule for double quoted strings. (Ex: "Hello world" ) 
@@ -568,7 +590,17 @@ LEX_INLINE size_t lex_builtin_rule_clike_comment(LexCursor cursor);
 // Ex:  /* This is c-like ml-comment */ 
 LEX_INLINE size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
 
-#endif
+#endif // LEX_DISABLE_BUILTIN_RULES
+
+/*
+ * Exit with status 1, and log message at stderr 
+ */
+void lex_fatal(const char *message);
+
+/*
+ * Reads contents from file
+ */
+char *lex_read_file(const char *path);
 
 #ifdef LEX_IMPLEMENTATION
 
@@ -598,7 +630,7 @@ bool lex_current(Lex* l, LexResult* result) {
 
   if (l->has_token) {
     if (result)
-      *result = LEX_SUCESS;
+      *result = LEX_SUCCESS;
 
 #ifdef LEX_PROFILER
     l->profiler_data.lex_current.dummy_calls++;
@@ -634,7 +666,7 @@ bool lex_current(Lex* l, LexResult* result) {
     l->types.items[id].profile_data.call_count++;
 #else
     size_t len = tkdef.rule(cursor);
-#endif
+#endif // LEX_PROFILER
 
     if (len != LEX_NO_MATCH) {
       cursor.length = len;
@@ -655,7 +687,7 @@ bool lex_current(Lex* l, LexResult* result) {
       }
 
       if (result)
-        *result = LEX_SUCESS;
+        *result = LEX_SUCCESS;
 
       return true;      
     }
@@ -681,7 +713,7 @@ bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id) {
       lex_move(l);
 
 #ifdef LEX_PROFILER
-      l->profiler_data.lex_consume.sucess_cout++;
+      l->profiler_data.lex_consume.success_count++;
 #endif
       return true;
     }
@@ -702,7 +734,7 @@ bool lex_skipn(Lex* l, LexTypeIndex id, const char* match, size_t match_len) {
       LEX_MERGE_BRANCH(l, b);
       
 #ifdef LEX_PROFILER
-      l->profiler_data.lex_skip.sucess_cout++;
+      l->profiler_data.lex_skip.success_count++;
 #endif
       return true;
     }
@@ -923,6 +955,15 @@ LexCursorPosition lex_curpos(LexCursor cursor) {
   };
 }
 
+const char* lex_curpos_str(LexCursor cursor) {
+  LexCursorPosition pos = lex_curpos(cursor);
+  
+  static char tmp[32];
+  sprintf(tmp, "%zu:%zu", pos.lineno, pos.column);
+  
+  return tmp;
+}
+
 void lex_curmove(LexCursor *cursor, ssize_t N) {
   cursor->index += N;
 }
@@ -943,8 +984,8 @@ size_t lex_curline_end(LexCursor cursor) {
 
 const char* lex_print_style(LexTypeIndex type) {
   // It has 36 different highlights
-  static const int colors[] = { 34, 37, 35, 36, 32, 33, }; // red only for erros
-  static const int styles[] = { 0, 1, 3, 4, 7, 9 };
+  static const int colors[] = { 34, 37, 35, 36, 32, 33 }; // red only for erros
+  static const int styles[] = { 0,  1,  3,  4,  7,  9 };
 
   const int color_count = sizeof(colors) / sizeof(int);
   const int style_count = sizeof(styles) / sizeof(int);
@@ -1017,19 +1058,19 @@ void lex_print_profiler(Lex l) {
   printf("%-25s: %d\n", "Branch count:", l.profiler_data.branch_count);
   printf("%-25s: %d\n", "   Merged branchs:", l.profiler_data.merge_count);
 
-  typeof(l.profiler_data.lex_current) lcurrent = l.profiler_data.lex_current;
+  Lex_ProfilerStats lcurrent = l.profiler_data.lex_current;
   printf("%-25s: %d\n", "Calls to 'lex_current'", lcurrent.call_count); 
   printf("%-25s: %d\n", "  Dummy calls:", lcurrent.dummy_calls);
-  printf("%-25s: %d\n", "  Skipped calls:",lcurrent.skipped_calls);
+  printf("%-25s: %d\n", "  Skipped calls:", lcurrent.skipped_calls);
   printf("%-25s: %d/%d\n", "  Total wast:", lcurrent.dummy_calls + lcurrent.skipped_calls, lcurrent.call_count);
 
-  typeof(l.profiler_data.lex_consume) lconsume = l.profiler_data.lex_consume;
+  Lex_ProfilerStats lconsume = l.profiler_data.lex_consume;
   printf("%-25s: %d\n", "Calls to 'lex_consume'", lconsume.call_count); 
-  printf("%-25s: %d\n", "  Sucess count:", lconsume.sucess_cout);
+  printf("%-25s: %d\n", "  Success count:", lconsume.success_count);
 
-  typeof(l.profiler_data.lex_skip) lskip = l.profiler_data.lex_skip;
+  Lex_ProfilerStats lskip = l.profiler_data.lex_skip;
   printf("%-25s: %d\n", "Calls to 'lex_skip'", lskip.call_count); 
-  printf("%-25s: %d\n", "  Sucess count:", lskip.sucess_cout);
+  printf("%-25s: %d\n", "  Success count:", lskip.success_count);
 
   printf("\nToken matching:\n");
 
@@ -1044,7 +1085,7 @@ void lex_print_profiler(Lex l) {
       int call_count = type.profile_data.call_count;
       uint64_t avg = call_count? (time_ns / call_count) : -1;
 
-      printf("  %-20s %-20lu %-20d %-20lu\n", type.name, time_ns, call_count, avg);
+      printf("  %s%-20s\e[0m %-20lu %-20d %-20lu\n", lex_print_style(i), type.name, time_ns, call_count, avg);
 
       total_time_ns += time_ns;
       total_call += call_count;
@@ -1064,7 +1105,7 @@ void lex_print_profiler(Lex l) {
     printf("  <No calls>\n\n");
   }
 }
-#endif
+#endif // LEX_PROFILER
 
 
 void lex_repl(LexTypeArray types) {
@@ -1131,6 +1172,10 @@ bool lex_idchar(char ch, bool allow_numbers) {
       ;
 }
 
+bool lex_idchar_kebab(char ch, bool allow_numbers) {
+  return lex_idchar(ch, allow_numbers) || ch == '-';
+}
+
 size_t lex_builtin_rule_id(LexCursor cursor) {
   const char *start = lex_curstr(cursor);
 
@@ -1139,6 +1184,23 @@ size_t lex_builtin_rule_id(LexCursor cursor) {
     for (; start[len] != '\0'; len++) {
       char ch = start[len];
       if (!lex_idchar(ch, true))
+        break;
+    }
+
+    return len;
+  }
+
+  return LEX_NO_MATCH;
+}
+
+size_t lex_builtin_rule_id_kebab(LexCursor cursor) {
+  const char *start = lex_curstr(cursor);
+
+  if (lex_idchar_kebab(start[0], false)) {
+    int len = 1;
+    for (; start[len] != '\0'; len++) {
+      char ch = start[len];
+      if (!lex_idchar_kebab(ch, true))
         break;
     }
 
@@ -1180,15 +1242,38 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
   return lex_match_region(cursor, "/*", "*/", false, true);
 }
 
-#endif
+#endif // LEX_DISABLE_BUILTIN_RULES
 
-#endif
+[[noreturn]]
+void lex_fatal(const char *message) {
+  fprintf(stderr, "%s\n", message);
+  exit(1);
+}
+
+char *lex_read_file(const char *path) {
+  FILE *file = fopen(path, "r");
+
+  if (!file)
+    return NULL;
+
+  fseek(file, 0, SEEK_END);
+  size_t fsize = ftell(file);
+  rewind(file);
+
+  char *content = malloc(fsize + 1);
+  fread(content, 1, fsize, file);
+  content[fsize] = '\0';
+
+  return content;
+}
+
+#endif // LEX_IMPLEMENTATION
 
 
 #ifdef LEX_STRIP_PREFIX
 
-/* 
- * By defining this macro before including lex.h, you'll be able to 
+/*
+ * By defining this macro before including lex.h, you'll be able to
  * access any libray symbol without prefixing with 'lex'.
  *
  * NOTE: If there's some naming conflics with your project libraries,
@@ -1197,8 +1282,8 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
  * Ex:
  * #define LEX_STRIP_PREFIX
  * #include <lex.h>
- * #undef SUCESS
- * #define SUCESS "overriden symbol"
+ * #undef SUCCESS
+ * #define SUCCESS "overriden symbol"
  */
 
 /// NO PREFIX MACROS
@@ -1245,17 +1330,20 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define tkstr_dup lex_tkstr_dup
 #define curcol lex_curcol
 #define curline lex_curline
-#define curpos lex_curline
+#define curpos lex_curpos
+#define curpos_str lex_curpos_str
 #define curmove lex_curmove
-#define print_style lex_print_style
 #define print_hl lex_print_hl
 #define print_types lex_print_types
-#define print_repl lex_print_repl
 #define print_profiler lex_print_profiler
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
+#define idchar lex_idchar
+#define idchar_kebab lex_idchar_kebab
+
 #define builtin_rule_ws lex_builtin_rule_ws
 #define builtin_rule_id lex_builtin_rule_id
+#define builtin_rule_id_kebab lex_builtin_rule_id_kebab
 #define builtin_rule_dqstring lex_builtin_rule_dqstring
 #define builtin_rule_sqstring lex_builtin_rule_sqstring
 #define builtin_rule_string lex_builtin_rule_string
@@ -1263,8 +1351,11 @@ size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor) {
 #define builtin_rule_asmlike_comment lex_builtin_rule_asmlike_comment
 #define builtin_rule_clike_comment lex_builtin_rule_clike_comment
 #define builtin_rule_clike_mlcomment lex_builtin_rule_clike_mlcomment
-#endif
+#endif // LEX_DISABLE_BUILTIN_RULES
 
-#endif
+#define fatal lex_fatal
+#define read_file lex_read_file
 
-#endif
+#endif // LEX_STRIP_PREFIX
+
+#endif // LEX_H 
