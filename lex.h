@@ -19,6 +19,7 @@
  * - LEX_TYPE_NAME_OFFSET           Can be used to strip type name prefix (read more about on it's definition).
  * - LEX_DISABLE_BUILTIN_RULES      Disables all builtin rules (use it if you wanna implement everything by yourself).
  * - LEX_PROFILER                   Enable profiling will expose implemenmtaion for 'lex_print_profiler', which can be used to print information about lex execution.
+ * - LEX_DISABLE_COLORS             Disable colorful outputs.
  */
 
 /// INCLUDES
@@ -40,6 +41,9 @@
 #endif // LEX_IMPLEMENTATION
 
 /// MACROS
+
+// This tag is used for decorate optional parameters (aka. nullable)
+#define LEX_OPTIONAL
 
 /*
  * This macro is used to offset the LexType.name created by TYPE macro.
@@ -166,6 +170,12 @@
   #define LEX_INLINE
 #endif // LEX_IMPLEMENTATION
 
+#ifdef LEX_DISABLE_COLORS
+  #define LEX_COLOR_RESET
+#else
+  #define LEX_COLOR_RESET "\e[0m"
+#endif
+
 /// STRUCTURES
 
 typedef struct Lex Lex;
@@ -246,6 +256,11 @@ typedef struct {
   LexTypeIndex id;
 } LexToken;
 
+typedef struct {
+  LexTypeIndex type;
+  const char* match; // Optional: When set to null, it disables matching by value
+} LexStruct;
+
 struct Lex {
   LexTypeArray types;
   LexCursor cursor;
@@ -295,7 +310,7 @@ Lex lex_init(LexTypeArray types, const char* source);
  *
  * Also, 'l->has_token' is set to true if it succeed.
  */
-bool lex_current(Lex* l, LexResult* result);
+bool lex_current(Lex* l, LEX_OPTIONAL LexResult* result);
 
 /*
  * Matches current token with the given 'id', if it matched, returns true 
@@ -303,7 +318,18 @@ bool lex_current(Lex* l, LexResult* result);
  * for 'lex_move' when it successfully matches the desired id, and just return false 
  * otherwise.
  */
-bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id);
+bool lex_consume(Lex* l, LEX_OPTIONAL LexToken* tk, LexTypeIndex id);
+
+/*
+ * Matches N tokens ahead with a specific structure. 
+ * You can optionally pass NULL for 'out' if you don't care about retrieving tokens.
+ */
+bool lex_consume_struct(Lex *l, LEX_OPTIONAL LexToken *out, LexStruct *_struct, size_t count); 
+
+/*
+ * Consume a single token reguardless of it's type.
+ */
+bool lex_consume_any(Lex *l, LEX_OPTIONAL LexToken *tk); 
 
 /*
  * It will conditionally consume the current token if it's id and string value
@@ -343,7 +369,7 @@ bool lex_has_next(Lex l);
  * If matched, returns the length of the match, that in the case of char can only be 1,
  * otherwise it returns 0 (LEX_NO_MATCH).
  */
-size_t lex_match_charsn(LexCursor cursor, const char* chars, int count);
+size_t lex_match_charsn(LexCursor cursor, const char* chars, size_t count);
 
 /*
  * Utilitary function, that can be used to match the char at the current cursor
@@ -598,19 +624,20 @@ LEX_INLINE size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
 void lex_fatal(const char *message);
 
 /*
- * Reads contents from file
+ * Reads contents from file.
  */
-char *lex_read_file(const char *path);
+char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size);
+
 
 #ifdef LEX_IMPLEMENTATION
 
 Lex lex_init(LexTypeArray types, const char* source) {
   LexType unset = {0};
 
-  for (int i = 0; i < types.count; i++) {
+  for (size_t i = 0; i < types.count; i++) {
     if (memcmp(&types.items[i], &unset, sizeof(LexType)) == 0) {
       char msg[512];
-      sprintf(msg, "Lex initialization failed due to an missing type definition. TypeIndex '%d' is unset", i);
+      sprintf(msg, "Lex initialization failed due to an missing type definition. TypeIndex '%zu' is unset", i);
       errno = EINVAL;
       perror(msg);
       exit(1);
@@ -623,7 +650,7 @@ Lex lex_init(LexTypeArray types, const char* source) {
   };
 }
 
-bool lex_current(Lex* l, LexResult* result) {
+bool lex_current(Lex* l, LEX_OPTIONAL LexResult* result) {
 #ifdef LEX_PROFILER
     l->profiler_data.lex_current.call_count++;
 #endif
@@ -700,7 +727,7 @@ bool lex_current(Lex* l, LexResult* result) {
 }
  
 
-bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id) { 
+bool lex_consume(Lex* l, LEX_OPTIONAL LexToken* tk, LexTypeIndex id) { 
 #ifdef LEX_PROFILER
   l->profiler_data.lex_consume.call_count++;
 #endif
@@ -720,6 +747,47 @@ bool lex_consume(Lex* l, LexToken* tk, LexTypeIndex id) {
   }
 
   return false;
+}
+
+bool lex_consume_struct(Lex *l, LEX_OPTIONAL LexToken *out, LexStruct *_struct, size_t count) {
+  Lex b = LEX_BRANCH(l);
+  
+  for (size_t i = 0; i < count; i++) {
+    LexStruct strct = _struct[i];
+  
+    LexToken tk;
+    Lex c = LEX_BRANCH(&b);
+    if (!lex_consume(&c, &tk, strct.type))
+      return false;
+    
+    if (strct.match) {
+      if (strcmp(lex_tkstr_tmp(tk), strct.match) != 0)
+        return false; // do not matches
+    }
+
+    if (out) 
+      out[i] = tk;
+    
+    LEX_MERGE_BRANCH(&b, c);
+  }
+
+  LEX_MERGE_BRANCH(l, b);
+
+  return true;
+}
+
+
+bool lex_consume_any(Lex *l, LEX_OPTIONAL LexToken *tk) {
+  if (lex_current(l, NULL)) {
+    if (tk)
+      *tk = l->tk;
+
+    lex_move(l);
+
+    return true;
+  }
+
+  return false; // no valid tokens
 }
 
 bool lex_skipn(Lex* l, LexTypeIndex id, const char* match, size_t match_len) {
@@ -766,8 +834,8 @@ bool lex_has_next(Lex l) {
   return lex_current(&l, &result) || result == LEX_INVALID_TOKEN;
 }
 
-size_t lex_match_charsn(LexCursor cursor, const char* chars, int count) {
-  for (int i = 0; i < count; i++) {
+size_t lex_match_charsn(LexCursor cursor, const char* chars, size_t count) {
+  for (size_t i = 0; i < count; i++) {
     if (cursor.source[cursor.index] == chars[i])
       return 1; // sizeof char 
   }
@@ -983,12 +1051,15 @@ size_t lex_curline_end(LexCursor cursor) {
 }
 
 const char* lex_print_style(LexTypeIndex type) {
+#ifdef LEX_DISABLE_COLORS  
+  return ""; // Useless if colors are disabled
+#else
   // It has 36 different highlights
   static const int colors[] = { 34, 37, 35, 36, 32, 33 }; // red only for erros
   static const int styles[] = { 0,  1,  3,  4,  7,  9 };
 
-  const int color_count = sizeof(colors) / sizeof(int);
-  const int style_count = sizeof(styles) / sizeof(int);
+  const uint8_t color_count = sizeof(colors) / sizeof(uint8_t);
+  const uint8_t style_count = sizeof(styles) / sizeof(uint8_t);
 
   uint8_t st = (type / color_count) % style_count;
   uint8_t fg = type % color_count;
@@ -997,6 +1068,7 @@ const char* lex_print_style(LexTypeIndex type) {
   sprintf(buf, "\e[%1u;%2um", styles[st], colors[fg]);
 
   return buf;
+#endif
 }
 
 void lex_print_hl(Lex l, bool print_labels) {
@@ -1005,15 +1077,23 @@ void lex_print_hl(Lex l, bool print_labels) {
 
   LexResult result;
   while (lex_current(&l, &result)) {
+#ifdef LEX_DISABLE_COLORS
+    LexType type = l.types.items[l.tk.id];
+    if (type.opt.skip)
+      printf("%s", lex_tkstr_tmp(l.tk));
+    else
+      printf("%s(%s)", type.name,  lex_tkstr_tmp(l.tk));
+#else
     printf("%s%s", lex_print_style(l.tk.id),  lex_tkstr_tmp(l.tk));
+#endif
     lex_move(&l);
   }
 
   if (result == LEX_INVALID_TOKEN) {
-    printf("\e[30;41m%c <-- Invalid token \e[0m", lex_curch(l.cursor));
+    printf("\e[30;41m%c <-- Invalid token " LEX_COLOR_RESET, lex_curch(l.cursor));
   }
 
-  printf("\e[0m\n");
+  printf(LEX_COLOR_RESET "\n");
 
   if (print_labels)
     lex_print_types(l);
@@ -1024,7 +1104,7 @@ void lex_print_types(Lex l) {
   for (LexTypeIndex i = 0; i < l.types.count; i++)
     printf("%s%s ", lex_print_style(i), l.types.items[i].name);
     
-  printf("\e[0m\n");
+  printf(LEX_COLOR_RESET "\n");
 }
 
 #ifdef LEX_PROFILER
@@ -1053,39 +1133,41 @@ void __lex_profiler_merge_branch_wrapper(Lex* l_ptr, Lex b) {
 }
 
 void lex_print_profiler(Lex l) {
-  printf("\n\e[7;37m[ Lex Profiler ]\e[0m\n");
-  
-  printf("%-25s: %d\n", "Branch count:", l.profiler_data.branch_count);
-  printf("%-25s: %d\n", "   Merged branchs:", l.profiler_data.merge_count);
+#ifdef LEX_DISABLE_COLORS
+  printf("\n[ Lex Profiler ]\n");
+#else
+  printf("\n\e[7;37m[ Lex Profiler ]" LEX_COLOR_RESET "\n");
+#endif // LEX_DISABLE_COLORS
+
 
   Lex_ProfilerStats lcurrent = l.profiler_data.lex_current;
-  printf("%-25s: %d\n", "Calls to 'lex_current'", lcurrent.call_count); 
-  printf("%-25s: %d\n", "  Dummy calls:", lcurrent.dummy_calls);
-  printf("%-25s: %d\n", "  Skipped calls:", lcurrent.skipped_calls);
-  printf("%-25s: %d/%d\n", "  Total wast:", lcurrent.dummy_calls + lcurrent.skipped_calls, lcurrent.call_count);
-
   Lex_ProfilerStats lconsume = l.profiler_data.lex_consume;
-  printf("%-25s: %d\n", "Calls to 'lex_consume'", lconsume.call_count); 
-  printf("%-25s: %d\n", "  Success count:", lconsume.success_count);
-
-  Lex_ProfilerStats lskip = l.profiler_data.lex_skip;
-  printf("%-25s: %d\n", "Calls to 'lex_skip'", lskip.call_count); 
-  printf("%-25s: %d\n", "  Success count:", lskip.success_count);
-
+  Lex_ProfilerStats lskip    = l.profiler_data.lex_skip;
+  
+  printf("%-25s: %d\n",    "Total created branchs:",  l.profiler_data.branch_count);
+  printf("%-25s: %d\n",    "   Merged branchs:",      l.profiler_data.merge_count);
+  printf("%-25s: %d\n",    "Calls to 'lex_current'",  lcurrent.call_count); 
+  printf("%-25s: %d\n",    "  Dummy calls (cached):", lcurrent.dummy_calls);
+  printf("%-25s: %d\n",    "  Skipped tokens:",       lcurrent.skipped_calls);
+  printf("%-25s: %d/%d\n", "  Total wast:",           lcurrent.dummy_calls + lcurrent.skipped_calls, lcurrent.call_count);
+  printf("%-25s: %d\n",    "Calls to 'lex_consume'",  lconsume.call_count); 
+  printf("%-25s: %d\n",    "  Success count:",        lconsume.success_count);
+  printf("%-25s: %d\n",    "Calls to 'lex_skip'",     lskip.call_count); 
+  printf("%-25s: %d\n",    "  Success count:",        lskip.success_count);
+  
   printf("\nToken matching:\n");
-
   if (l.profiler_data.lex_current.call_count > 0) {
     uint64_t total_time_ns = 0;
     int total_call = 0; 
     printf("  %-20s %-20s %-20s %-20s\n", "Type", "Time (ns)", "Call count", "Avg (ns/call)");
-    for (int i = 0; i < l.types.count; i++) {
+    for (LexTypeIndex i = 0; i < l.types.count; i++) {
       LexType type = l.types.items[i];
 
       uint64_t time_ns = type.profile_data.n_time;
       int call_count = type.profile_data.call_count;
       uint64_t avg = call_count? (time_ns / call_count) : -1;
 
-      printf("  %s%-20s\e[0m %-20lu %-20d %-20lu\n", lex_print_style(i), type.name, time_ns, call_count, avg);
+      printf("  %s%-20s" LEX_COLOR_RESET " %-20lu %-20d %-20lu\n", lex_print_style(i), type.name, time_ns, call_count, avg);
 
       total_time_ns += time_ns;
       total_call += call_count;
@@ -1099,7 +1181,6 @@ void lex_print_profiler(Lex l) {
     printf("%-25s: %d\n", "  Calls", total_call);
     printf("%-25s: %lu\n", "  Avg. call time (ns)", total_avg);
     printf("%-25s: time: %fms  (avg. of %f ms per rule call)\n", "  Human readable", total_time_ms, total_avg_ms);
-
     printf("\n");
   } else {
     printf("  <No calls>\n\n");
@@ -1250,7 +1331,7 @@ void lex_fatal(const char *message) {
   exit(1);
 }
 
-char *lex_read_file(const char *path) {
+char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
   FILE *file = fopen(path, "r");
 
   if (!file)
@@ -1261,9 +1342,33 @@ char *lex_read_file(const char *path) {
   rewind(file);
 
   char *content = malloc(fsize + 1);
-  fread(content, 1, fsize, file);
-  content[fsize] = '\0';
+  if (!content) {
+    fclose(file);
+    return NULL; 
+  }
 
+  size_t total = 0;
+  while (total < fsize) {
+    size_t n = fread(content, 1, fsize, file);
+
+    if (n == 0) {
+      if (ferror(file)) {
+        free(content);
+        fclose(file);
+        return NULL;
+      }
+
+      break;
+    }
+
+    total += n;
+  }
+
+  fclose(file);
+  content[total] = '\0';
+  if (out_file_size)
+    *out_file_size = total;
+  
   return content;
 }
 
@@ -1309,11 +1414,14 @@ char *lex_read_file(const char *path) {
 #define TypeArray LexTypeArray
 #define TypeIndex LexTypeIndex
 #define Token LexToken
+#define Struct LexStruct
 
 /// NO PREFIX FUNCTIONS
 #define init lex_init
 #define current lex_current
 #define consume lex_consume
+#define consume_struct lex_consume_struct
+#define consume_any lex_consume_any
 #define skipn lex_skipn
 #define skip(l, id, match) lex_skip // This skip macro conflicts with skip flag from LexTypeOptions
 #define move_to lex_move_to

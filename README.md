@@ -196,6 +196,7 @@ This finishes our tutorial. For more information, the library is well documented
  - `LEX_TYPE_NAME_OFFSET`: Can be used to strip type name prefix (read more about on it's definition).
  - `LEX_DISABLE_BUILTIN_RULES`: Disables all builtin rules (use it if you wanna implement everything by yourself).
  - `LEX_PROFILER`: Enable profiling will expose implemenmtaion for `lex_print_profiler`, which can be used to print information about lex execution.
+ - `LEX_DISABLE_COLORS`: Disable colorful outputs.
 
  
 **Built-in rules**
