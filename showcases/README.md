@@ -23,3 +23,4 @@ As the library still being developed, some of the showcases could be outdated, a
 - [Profiling branchs](https://github.com/Raffa064/lex.h/blob/main/showcases/branching.c)
 - [Exploring lex_print_hl colorizer](https://github.com/Raffa064/lex.h/blob/main/showcases/)
 - [Working CLI Calculator](https://github.com/Raffa064/lex.h/blob/main/showcases/calc.c)
+- [XMacro Example](https://github.com/Raffa064/lex.h/blob/main/showcases/xmacro.c)

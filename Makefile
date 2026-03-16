@@ -3,7 +3,7 @@ SHOWCASE := $(SHOWCASE)$(S)
 run: build/$(SHOWCASE)
 	@if [ -z '$(SHOWCASE)' ]; then\
 		echo "Available showcases: (Run with 'make SHOWCASE=name')";\
-		ls ./showcases;\
+		ls ./showcases | grep .c;\
 	else\
 		./build/$(SHOWCASE);\
 	fi

@@ -20,6 +20,7 @@
  * - LEX_DISABLE_BUILTIN_RULES      Disables all builtin rules (use it if you wanna implement everything by yourself).
  * - LEX_PROFILER                   Enable profiling will expose implemenmtaion for 'lex_print_profiler', which can be used to print information about lex execution.
  * - LEX_DISABLE_COLORS             Disable colorful outputs.
+ * - LEX_USE_XMACRO                 Enables useful macros for using X-macro pattern.
  */
 
 /// INCLUDES
@@ -174,6 +175,33 @@
   #define LEX_COLOR_RESET
 #else
   #define LEX_COLOR_RESET "\e[0m"
+#endif
+
+
+#ifdef LEX_USE_XMACRO
+#define __LEX_ENUMX_FILTER(id, ...)id,
+#define LEX_ENUMX(XTABLE) enum { XTABLE(__LEX_ENUMX_FILTER) XTABLE##_COUNT }
+#define __LEX_TYPEX_FILTER(...) LEX_TYPE(__VA_ARGS__),
+#define LEX_TYPEX(XTABLE) { XTABLE(__LEX_TYPEX_FILTER) }
+
+/*
+ * Using X-macros you can make really cool stuff in lex.h, pushing single source of truth to it's limits:
+ *
+ * // Any changes to this "X-table" will affect both ExampleTokens enum and types array.
+ * #define EXAMPLE(X) \
+ *   X(EX_WS, lex_builtin_rule_ws, .skip = true) \
+ *   X(EX_ID, lex_builtin_rule_id)
+ *
+ * typedef LEX_ENUMX(EXAMPLE) ExampleTokens;
+ *
+ * LexType types[EXAMPLE_COUNT] = LEX_TYPEX(EXAMPLE);
+ *
+ * int main() {
+ *   Lex l = lex_init(LEX_TYPEARRAY(types), "this is an example");
+ *   lex_print_hl(l, true);
+ * }
+ */
+
 #endif
 
 /// STRUCTURES
@@ -1058,8 +1086,8 @@ const char* lex_print_style(LexTypeIndex type) {
   static const int colors[] = { 34, 37, 35, 36, 32, 33 }; // red only for erros
   static const int styles[] = { 0,  1,  3,  4,  7,  9 };
 
-  const uint8_t color_count = sizeof(colors) / sizeof(uint8_t);
-  const uint8_t style_count = sizeof(styles) / sizeof(uint8_t);
+  const uint8_t color_count = sizeof(colors) / sizeof(int);
+  const uint8_t style_count = sizeof(styles) / sizeof(int);
 
   uint8_t st = (type / color_count) % style_count;
   uint8_t fg = type % color_count;
@@ -1405,6 +1433,11 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 #define curch lex_curch
 #define curstart lex_curstart
 #define curend lex_curend
+
+#ifdef LEX_USE_XMACRO
+#define ENUMX LEX_ENUMX
+#define TYPEX LEX_TYPEX
+#endif
 
 /// NO PREFIX STRUCTURES
 #define CursorPosition LexCursorPosition

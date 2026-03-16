@@ -197,7 +197,7 @@ This finishes our tutorial. For more information, the library is well documented
  - `LEX_DISABLE_BUILTIN_RULES`: Disables all builtin rules (use it if you wanna implement everything by yourself).
  - `LEX_PROFILER`: Enable profiling will expose implemenmtaion for `lex_print_profiler`, which can be used to print information about lex execution.
  - `LEX_DISABLE_COLORS`: Disable colorful outputs.
-
+ - `LEX_USE_XMACRO`: Enables useful macros for using X-macro pattern.
  
 **Built-in rules**
 | Function name                   | Description                           | Valid examples                          |
