@@ -63,7 +63,7 @@ size_t rule_term(Cursor cursor) {
 
 // [0-9]+
 size_t rule_number(Cursor cursor) {
-  const char *start = curstr(cursor);
+  const char *start = lex_cursor_str(cursor);
 
   size_t len = NO_MATCH;
   for (; start[len] != '\0'; ++len) {

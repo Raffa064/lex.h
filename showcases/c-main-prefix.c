@@ -56,16 +56,16 @@ int main() {
 
   LexResult result;
   while (lex_current(&l, &result)) {
-    printf("(%2zu:%2zu) %-10s '%s'\n", lex_curline(l.cursor), lex_curcol(l.cursor), lex_tkname(l, l.tk), lex_tkstr_tmp(l.tk));
+    printf("(%2zu:%2zu) %-10s '%s'\n", lex_cursor_line(l.cursor), lex_cursor_col(l.cursor), lex_tkname(l, l.tk), lex_tkstr_tmp(l.tk));
     lex_move(&l);
   }
 
   if (result == LEX_INVALID_TOKEN) {
     fprintf(stderr, 
       "\e[31mErro: (%2zu:%2zu) '%s'\e[0m\n", 
-      lex_curline(l.cursor), 
-      lex_curcol(l.cursor), 
-      lex_curstr(l.cursor)
+      lex_cursor_line(l.cursor), 
+      lex_cursor_col(l.cursor), 
+      lex_cursor_str(l.cursor)
     );
 
     return 1;
@@ -96,7 +96,7 @@ size_t rule_term(LexCursor cursor) {
 
 // [0-9]+
 size_t rule_number(LexCursor cursor) {
-  const char *start = lex_curstr(cursor);
+  const char *start = lex_cursor_str(cursor);
 
   size_t len = LEX_NO_MATCH;
   for (; start[len] != '\0'; ++len) {

@@ -1,10 +1,10 @@
 // ----------------- lex.h | made by Raffa064 --------------------
-// Check out for new versions at http://github;com/Raffa064/lex.h
+// Check out for new versions at https://github.com/Raffa064/lex.h
 
 #ifndef LEX_H
 #define LEX_H
 
-#define LEX_VERSION 1
+#define LEX_VERSION 2
 
 /*
  * ABOUT
@@ -122,12 +122,12 @@
  * Returns a pointer to the start of the token on the source code.
  * NOTE: It's not null-terminate as the source is ideally imutable.
  */
-#define lex_tkstr(token) ((const char*)(token.cursor.source + token.cursor.index))
+#define lex_tkstr(token) ((const char*)(token.sv.begin))
 
 /*
  * Get the length of a token.
  */
-#define lex_tklen(token) ((size_t)token.cursor.length)
+#define lex_tklen(token) (lex_view_count(token.sv))
 
 /*
  * Get token type name.
@@ -137,27 +137,38 @@
 /*
  * Get a pointer for the source code at cursor position.
  */
-#define lex_curstr(cursor) ((const char*)(cursor.source + cursor.index))
+#define lex_cursor_str(cursor) ((const char*)(cursor.source + cursor.index))
 
 /*
  * Get a single char from the source code at the cursor position.
  */
-#define lex_curch(cursor) ((const char)(cursor.source[cursor.index]))
+#define lex_cursor_ch(cursor) ((const char)(cursor.source[cursor.index]))
 
 /*
  * Get cursor start index.
  */
-#define lex_curstart(cursor) ((size_t)(cursor.index))
+#define lex_cursor_start(cursor) ((size_t)(cursor.index))
 
 /*
  * Get cursor end index.
  */
-#define lex_curend(cursor) ((size_t)(cursor.index + cursor.length))
+#define lex_cursor_end(cursor) ((size_t)(cursor.index + cursor.length))
 
 /*
- * Get immutable pointer for a specific index of the source
+ * Get a pointer for the source code at specified index
  */
-#define lex_view(lexer, index) ((const char*) lexer.cursor.source + index)
+#define lex_source(lex, index) ((const char*) lex.cursor.source + index)
+
+/*
+ * Format string for LexStringView
+ */
+#define LEX_SVFMT "%.*s"
+
+/*
+ * Shorthand for using string views inside format strings args.
+ * Ex: printf("sv: " LEX_SVFMT, lex_svarg(my_sv));
+ */
+#define lex_svarg(sv) ((int)lex_view_count(sv)), ((sv).begin)
 
 /*
  * You can use this while creating 'rule functions' to indicate non matching cases.
@@ -280,7 +291,11 @@ typedef struct {
 } LexTypeArray;
 
 typedef struct {
-  LexCursor cursor;
+  const char *begin, *end;// inclusive/exclusive
+} LexStringView;
+
+typedef struct {
+  LexStringView sv;
   LexTypeIndex id;
 } LexToken;
 
@@ -486,44 +501,93 @@ char* lex_tkstr_dup(LexToken tk);
  * Get cursor column position by searching for the first occurrency of 
  * '\n' before the 'cursor->index'. 
  */
-size_t lex_curcol(LexCursor cursor);
+size_t lex_cursor_col(LexCursor cursor);
 
 /*
  * Get cursor line position by scanning all occurrencies of '\n' before 'cursor->index'
  */
-size_t lex_curline(LexCursor cursor);
+size_t lex_cursor_line(LexCursor cursor);
 
 /*
  * Reset cursor length and position to zero
  */
-LEX_INLINE void lex_curreset(LexCursor *cursor);
+LEX_INLINE void lex_cursor_reset(LexCursor *cursor);
 
 /*
  * Get cursor line and column positions as a LexCursorPosition object. 
- * That's an alias for both  'lex_curcol' and 'lex_curline'.
+ * That's an alias for both  'lex_cursor_col' and 'lex_cursor_line'.
  */
-LEX_INLINE LexCursorPosition lex_curpos(LexCursor cursor);
+LEX_INLINE LexCursorPosition lex_cursor_pos(LexCursor cursor);
 
 /*
  * Returns a tmp string for the cursor position in the format "<line>:<column" (Ex: "64:3")
  */
-const char* lex_curpos_str(LexCursor cursor);
+const char* lex_cursor_pos_str(LexCursor cursor);
 
 /*
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
  */
-LEX_INLINE void lex_curmove(LexCursor *cursor, ssize_t N);
+LEX_INLINE void lex_cursor_move(LexCursor *cursor, ssize_t N);
 
 /*
  * Returns the index for the begining of the line where the cursor is.
  */
-size_t lex_curline_start(LexCursor cursor); 
+size_t lex_cursor_line_start(LexCursor cursor); 
 
 /*
  * Returng the index for the end of the line where the cursor is.
  */
-size_t lex_curline_end(LexCursor cursor);
+size_t lex_cursor_line_end(LexCursor cursor);
 
+/*
+ * Create a string view from a length-based c-string
+ */
+LEX_INLINE LexStringView lex_viewn(const char* cstr, size_t count);
+
+/*
+ * Create a string view from a null-terminated c-string
+ */
+LEX_INLINE LexStringView lex_view(const char* cstr);
+
+/*
+ * Returns a string view of the source code
+ */
+LEX_INLINE LexStringView lex_view_src(Lex l);
+
+/*
+ * Returns a string view of the source code before/after cursor position.
+ */
+LEX_INLINE LexStringView lex_view_before(LexCursor);
+
+/*
+ * Returns a string view of the current token selection
+ */
+LEX_INLINE LexStringView lex_view_at(LexCursor cursor);
+
+/*
+ * Returns a string view of the source code before/after cursor position.
+ */
+LEX_INLINE LexStringView lex_view_after(LexCursor);
+
+/*
+ * Returns a heap allocated null-terminated c-string copy of a string view.
+ */
+char* lex_view_dupstr(LexStringView sv);
+
+/*
+ * Returns the length of the string view
+ */
+LEX_INLINE size_t lex_view_count(LexStringView sv);
+
+/*
+ * Compare two string views, and return true if they're equals to each other
+ */
+bool lex_view_eq(LexStringView sv1, LexStringView sv2);
+
+/*
+ * Remove prefix/suffix (like quotes) from a string view
+ */
+LexStringView lex_view_unwrap(LexStringView sv, size_t offset);
 
 /*
  * This function returns the color code for the given type.
@@ -540,7 +604,6 @@ const char * lex_print_style(LexTypeIndex type);
  * Use 'print_labels' to show a small legend containing the meaning of each color.
  */
 void lex_print_hl(Lex l, bool print_caption);
-
 
 /*
  * It will print all type names in a sianlge line
@@ -649,6 +712,7 @@ LEX_INLINE size_t lex_builtin_rule_clike_mlcomment(LexCursor cursor);
 /*
  * Exit with status 1, and log message at stderr 
  */
+[[noreturn]]
 void lex_fatal(const char *message);
 
 /*
@@ -728,7 +792,7 @@ bool lex_current(Lex* l, LEX_OPTIONAL LexResult* result) {
 
       l->cursor = cursor;
       l->tk = (LexToken){
-        .cursor = cursor,
+        .sv = lex_view_at(cursor),
         .id = id,
       };
       l->has_token = true;
@@ -876,7 +940,7 @@ size_t lex_match_chars(LexCursor cursor, const char* chars) {
 }
 
 size_t lex_match_keywordn(LexCursor cursor, const char* keyword, size_t len) {
-  const char *str = lex_curstr(cursor);
+  const char *str = lex_cursor_str(cursor);
 
   if (strncmp(str, keyword, len) == 0) {
     char lookahead = str[len];
@@ -895,7 +959,7 @@ size_t lex_match_keyword(LexCursor cursor, const char* keyword) {
 }
 
 size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped, bool multiline) {
-  const char *str = lex_curstr(cursor);
+  const char *str = lex_cursor_str(cursor);
   
   if (str[0] == delimiter) {
     for (size_t len = 1; str[len] != '\0'; len++) {
@@ -923,25 +987,25 @@ size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix
 
   if (lex_match_exact(cursor, prefix)) {
     LexCursor cur = cursor;
-    lex_curmove(&cur, prefix_len);
+    lex_cursor_move(&cur, prefix_len);
 
     bool found_suffix = false;
-    while (lex_curch(cur) != '\0') {
+    while (lex_cursor_ch(cur) != '\0') {
       if (lex_match_exact(cur, suffix)) {
-        lex_curmove(&cur, suffix_len);
+        lex_cursor_move(&cur, suffix_len);
         found_suffix = true;
         break;
       }
 
-      if (!multiline && lex_curch(cur) == '\n') {
+      if (!multiline && lex_cursor_ch(cur) == '\n') {
         return LEX_NO_MATCH; // probably a broken match, like an unterminatted string
       }
       
-      lex_curmove(&cur, 1);
+      lex_cursor_move(&cur, 1);
     }
 
     if (optional_suffix || found_suffix)
-      return lex_curstart(cur) - lex_curstart(cursor);
+      return lex_cursor_start(cur) - lex_cursor_start(cursor);
       
     return LEX_NO_MATCH; // Non-optional suffix
   }
@@ -951,7 +1015,7 @@ size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix
 
 
 size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len) {
-  const char *str = lex_curstr(cursor);
+  const char *str = lex_cursor_str(cursor);
 
   if (strncmp(str, match, len) == 0)
     return len;
@@ -984,13 +1048,13 @@ char* lex_tkstr_dup(LexToken tk) {
   return buf;
 }
 
-size_t lex_curcol(LexCursor cursor) {
+size_t lex_cursor_col(LexCursor cursor) {
   size_t column = 1;
 
   while (cursor.index > 0) {
-    lex_curmove(&cursor, -1);
+    lex_cursor_move(&cursor, -1);
     
-    if (lex_curch(cursor) == '\n')
+    if (lex_cursor_ch(cursor) == '\n')
       break;      
 
     column++;
@@ -999,23 +1063,23 @@ size_t lex_curcol(LexCursor cursor) {
   return column;
 }
 
-size_t lex_curline(LexCursor cursor) {
+size_t lex_cursor_line(LexCursor cursor) {
   size_t lineno = 1;
   while(cursor.index > 0) {
-    lex_curmove(&cursor, -1);
+    lex_cursor_move(&cursor, -1);
     
-    if (lex_curch(cursor) == '\n')
+    if (lex_cursor_ch(cursor) == '\n')
       lineno++;
   }
 
   return lineno;
 }
 
-void lex_curreset(LexCursor *cursor) {
+void lex_cursor_reset(LexCursor *cursor) {
   cursor->index = cursor->length = 0;
 }
 
-LexCursorPosition lex_curpos(LexCursor cursor) {
+LexCursorPosition lex_cursor_pos(LexCursor cursor) {
   size_t lineno = 1;
   size_t column = 1;
 
@@ -1028,15 +1092,15 @@ LexCursorPosition lex_curpos(LexCursor cursor) {
     c_stop &= c.index > 0;
 
     if (l_stop) {
-      lex_curmove(&l, -1);
-      if (lex_curch(l) == '\n')
+      lex_cursor_move(&l, -1);
+      if (lex_cursor_ch(l) == '\n')
         lineno++;
     }
 
     if (c_stop) {
-      lex_curmove(&c, -1);
+      lex_cursor_move(&c, -1);
 
-      if (lex_curch(c) != '\n') {
+      if (lex_cursor_ch(c) != '\n') {
         column++;
       } else c_stop = false;
     }
@@ -1051,8 +1115,8 @@ LexCursorPosition lex_curpos(LexCursor cursor) {
   };
 }
 
-const char* lex_curpos_str(LexCursor cursor) {
-  LexCursorPosition pos = lex_curpos(cursor);
+const char* lex_cursor_pos_str(LexCursor cursor) {
+  LexCursorPosition pos = lex_cursor_pos(cursor);
   
   static char tmp[32];
   sprintf(tmp, "%zu:%zu", pos.lineno, pos.column);
@@ -1060,22 +1124,105 @@ const char* lex_curpos_str(LexCursor cursor) {
   return tmp;
 }
 
-void lex_curmove(LexCursor *cursor, ssize_t N) {
+void lex_cursor_move(LexCursor *cursor, ssize_t N) {
   cursor->index += N;
 }
 
-size_t lex_curline_start(LexCursor cursor) {
-  while (cursor.index > 0 && lex_curch(cursor) != '\n')
-    lex_curmove(&cursor, -1);
+size_t lex_cursor_line_start(LexCursor cursor) {
+  while (cursor.index > 0 && lex_cursor_ch(cursor) != '\n')
+    lex_cursor_move(&cursor, -1);
 
   return cursor.index + 1;
 }
 
-size_t lex_curline_end(LexCursor cursor) {
-  while (lex_curch(cursor) != '\0' && lex_curch(cursor) != '\n')
-    lex_curmove(&cursor, 1);
+size_t lex_cursor_line_end(LexCursor cursor) {
+  while (lex_cursor_ch(cursor) != '\0' && lex_cursor_ch(cursor) != '\n')
+    lex_cursor_move(&cursor, 1);
 
   return cursor.index;
+}
+
+LexStringView lex_viewn(const char* cstr, size_t count) {
+  return (LexStringView) { 
+    .begin = cstr,
+    .end = cstr + count
+  };
+}
+
+LexStringView lex_view(const char* cstr) {
+  return lex_viewn(cstr, strlen(cstr));
+}
+
+LexStringView lex_view_src(Lex l) {
+  return (LexStringView) {
+    .begin = l.cursor.source,
+    .end = l.cursor.source + strlen(l.cursor.source)
+  };
+}
+
+LexStringView lex_view_before(LexCursor cursor) {
+  return (LexStringView) {
+    .begin = cursor.source,
+    .end = lex_cursor_str(cursor)
+  };
+}
+
+LexStringView lex_view_at(LexCursor cursor) {
+  const char* cursor_str = lex_cursor_str(cursor);
+
+  return (LexStringView) {
+    .begin = cursor_str,
+    .end = cursor_str + cursor.length
+  };
+}
+
+LexStringView lex_view_after(LexCursor cursor) {
+  const char* cursor_str = lex_cursor_str(cursor) + cursor.length;
+
+  return (LexStringView) {
+    .begin = cursor_str,
+    .end = cursor_str + strlen(cursor_str)
+  };
+}
+
+char* lex_view_dupstr(LexStringView sv) {
+  size_t len = lex_view_count(sv) + 1;
+  char *dup = malloc(len);
+  memcpy(dup, sv.begin, len);
+  dup[len] = '\0';
+
+  return dup;
+}
+
+size_t lex_view_count(LexStringView sv) {
+  return sv.end - sv.begin;
+}
+
+bool lex_view_eq(LexStringView sv1, LexStringView sv2) {
+  if (lex_view_count(sv1) != lex_view_count(sv2))
+    return false;
+
+  const char *p1 = sv1.begin, *p2 = sv2.begin;
+  while (p1 != sv1.end || p2 != sv2.end) {
+    if (*p1 != *p2)
+      return false;
+
+    p1++; p2++;
+  }
+
+  return true;
+}
+
+LexStringView lex_view_unwrap(LexStringView sv, size_t offset) {
+  LexStringView sv2 = (LexStringView) {
+    .begin = sv.begin + offset,
+    .end = sv.end - offset
+  };
+
+  if (sv2.end < sv2.begin)
+    sv2.end = sv2.begin;
+
+  return sv2;
 }
 
 const char* lex_print_style(LexTypeIndex type) {
@@ -1100,7 +1247,7 @@ const char* lex_print_style(LexTypeIndex type) {
 }
 
 void lex_print_hl(Lex l, bool print_labels) {
-  lex_curreset(&l.cursor); // return to begining of file
+  lex_cursor_reset(&l.cursor); // return to begining of file
   l.no_skip = true;
 
   LexResult result;
@@ -1118,7 +1265,7 @@ void lex_print_hl(Lex l, bool print_labels) {
   }
 
   if (result == LEX_INVALID_TOKEN) {
-    printf("\e[30;41m%c <-- Invalid token " LEX_COLOR_RESET, lex_curch(l.cursor));
+    printf("\e[30;41m%c <-- Invalid token " LEX_COLOR_RESET, lex_cursor_ch(l.cursor));
   }
 
   printf(LEX_COLOR_RESET "\n");
@@ -1286,7 +1433,7 @@ bool lex_idchar_kebab(char ch, bool allow_numbers) {
 }
 
 size_t lex_builtin_rule_id(LexCursor cursor) {
-  const char *start = lex_curstr(cursor);
+  const char *start = lex_cursor_str(cursor);
 
   if (lex_idchar(start[0], false)) {
     int len = 1;
@@ -1303,7 +1450,7 @@ size_t lex_builtin_rule_id(LexCursor cursor) {
 }
 
 size_t lex_builtin_rule_id_kebab(LexCursor cursor) {
-  const char *start = lex_curstr(cursor);
+  const char *start = lex_cursor_str(cursor);
 
   if (lex_idchar_kebab(start[0], false)) {
     int len = 1;
@@ -1429,14 +1576,17 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 #define tkstr lex_tkstr
 #define tklen lex_tklen
 #define tkname lex_tkname
-#define curstr lex_curstr
-#define curch lex_curch
-#define curstart lex_curstart
-#define curend lex_curend
+#define cursor_str lex_cursor_str
+#define cursor_ch lex_cursor_ch
+#define cursor_start lex_cursor_start
+#define cursor_end lex_cursor_end
+// #define source lex_source  // Too generic to be exported...
+#define SVFMT LEX_SVFMT
+#define svarg lex_svarg
 
 #ifdef LEX_USE_XMACRO
-#define ENUMX LEX_ENUMX
-#define TYPEX LEX_TYPEX
+  #define ENUMX LEX_ENUMX
+  #define TYPEX LEX_TYPEX
 #endif
 
 /// NO PREFIX STRUCTURES
@@ -1469,29 +1619,38 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 #define match_region lex_match_region
 #define tkstr_tmp lex_tkstr_tmp
 #define tkstr_dup lex_tkstr_dup
-#define curcol lex_curcol
-#define curline lex_curline
-#define curpos lex_curpos
-#define curpos_str lex_curpos_str
-#define curmove lex_curmove
+#define cursor_col lex_cursor_col
+#define cursor_line lex_cursor_line
+#define cursor_pos lex_cursor_pos
+#define cursor_pos_str lex_cursor_pos_str
+#define cursor_move lex_cursor_move
+//#define viewn lex_viewn // Too generic to be exported...
+//#define view lex_view // Too generic to be exported..
+#define view_src lex_view_src
+#define view_before lex_view_before
+#define view_at lex_view_at
+#define view_after lex_view_after
+#define view_dupstr lex_view_dupstr
+#define view_count lex_view_count
+#define view_eq lex_view_eq
+#define view_unwrap lex_view_unwrap
 #define print_hl lex_print_hl
 #define print_types lex_print_types
 #define print_profiler lex_print_profiler
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
-#define idchar lex_idchar
-#define idchar_kebab lex_idchar_kebab
-
-#define builtin_rule_ws lex_builtin_rule_ws
-#define builtin_rule_id lex_builtin_rule_id
-#define builtin_rule_id_kebab lex_builtin_rule_id_kebab
-#define builtin_rule_dqstring lex_builtin_rule_dqstring
-#define builtin_rule_sqstring lex_builtin_rule_sqstring
-#define builtin_rule_string lex_builtin_rule_string
-#define builtin_rule_pylike_comment lex_builtin_rule_pylike_comment
-#define builtin_rule_asmlike_comment lex_builtin_rule_asmlike_comment
-#define builtin_rule_clike_comment lex_builtin_rule_clike_comment
-#define builtin_rule_clike_mlcomment lex_builtin_rule_clike_mlcomment
+  #define idchar lex_idchar
+  #define idchar_kebab lex_idchar_kebab
+  #define builtin_rule_ws lex_builtin_rule_ws
+  #define builtin_rule_id lex_builtin_rule_id
+  #define builtin_rule_id_kebab lex_builtin_rule_id_kebab
+  #define builtin_rule_dqstring lex_builtin_rule_dqstring
+  #define builtin_rule_sqstring lex_builtin_rule_sqstring
+  #define builtin_rule_string lex_builtin_rule_string
+  #define builtin_rule_pylike_comment lex_builtin_rule_pylike_comment
+  #define builtin_rule_asmlike_comment lex_builtin_rule_asmlike_comment
+  #define builtin_rule_clike_comment lex_builtin_rule_clike_comment
+  #define builtin_rule_clike_mlcomment lex_builtin_rule_clike_mlcomment
 #endif // LEX_DISABLE_BUILTIN_RULES
 
 #define fatal lex_fatal

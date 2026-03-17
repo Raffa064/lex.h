@@ -54,15 +54,15 @@ int main() {
   }
 
   if (result == LEX_INVALID_TOKEN) {
-    size_t start = lex_curline_start(lex.cursor);
-    size_t end   = lex_curline_end(lex.cursor);
+    size_t start = lex_cursor_line_start(lex.cursor);
+    size_t end   = lex_cursor_line_end(lex.cursor);
    
     fprintf(stderr, 
       "\e[31mErro: at %zu:%zu near '%.*s'\e[0m\n", 
-      lex_curline(lex.cursor), 
-      lex_curcol(lex.cursor), 
+      lex_cursor_line(lex.cursor), 
+      lex_cursor_col(lex.cursor), 
       (int) (end - start), 
-      lex_view(lex, start)
+      lex_source(lex, start)
     );
 
     return 1;
@@ -87,7 +87,7 @@ size_t json_lex_rule_bool(LexCursor cursor) {
 
 // [+-]?[0-9]+(.[0-9]*)?
 size_t json_lex_rule_number(LexCursor cursor) { 
-  const char *start = lex_curstr(cursor);
+  const char *start = lex_cursor_str(cursor);
 
   size_t len = LEX_NO_MATCH;
 

@@ -78,7 +78,7 @@ int main() {
         [ERROR_INVALID_TOKEN]    = "Invalid token.",
       };
       
-      printf("   \e[31m%*s ERROR: %s\e[0m\n", (int)lex_curcol(lex.cursor), "^", err_msgs[calc_error]);
+      printf("   \e[31m%*s ERROR: %s\e[0m\n", (int)lex_cursor_col(lex.cursor), "^", err_msgs[calc_error]);
     }
   }
 }
@@ -90,12 +90,12 @@ size_t calc_rule_num(LexCursor cursor) {
   
   size_t len = LEX_NO_MATCH;
   for (;;) {
-    char ch = lex_curch(cursor);
+    char ch = lex_cursor_ch(cursor);
     
     if (ch == '\0') break;
 
     if (isdigit(ch)) {
-      lex_curmove(&cursor, 1);
+      lex_cursor_move(&cursor, 1);
       len++;
       continue;
     }
@@ -104,7 +104,7 @@ size_t calc_rule_num(LexCursor cursor) {
       if (dot) return LEX_NO_MATCH; // Double dotted number is invalid -> '1.2.2'
 
       dot = true;
-      lex_curmove(&cursor, 1);
+      lex_cursor_move(&cursor, 1);
       len++;
       continue;
     }
