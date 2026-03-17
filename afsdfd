@@ -1,0 +1,194 @@
+[33mcommit 710f6623807acb74895db22829d2a3a25984bb15[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Tue Mar 17 10:45:15 2026 -0300
+
+    Version 2: Introduction of LexStringView
+    
+    - Added LexStringView, and it's related helper functions as lex_view_*
+    - LexToken.cursor field has been replaced with a string view
+    - Old "lex_view" macro is now renammed to lex_source
+    - Cursor functions and macros namespace has changed: lex_cur* -> lex_cursor_*
+
+[33mcommit baee9f64c8b21a4ff2d805b04b6e85772c65179b[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Sun Mar 15 23:17:39 2026 -0300
+
+    Added XMACRO
+
+[33mcommit c1723e08473c8f57dad9a5fd1c50cc51217d7ac8[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Sun Mar 15 19:30:43 2026 -0300
+
+    Refactory + New Features
+    - Added lex_consume_all
+    - Added lex_consume_struct
+    - Added LEX_DISABLE_COLORS pre-include directive
+    - Introduced LEX_OPTIONAL decorator for nullable fields
+    - Replaced int with size_t/ssize_t where it does matter
+
+[33mcommit 691bf50fa2f63608ac76b7e5a932d00d402a2cdf[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Sat Mar 14 01:00:51 2026 -0300
+
+    Refactory + Features + Improvements
+    
+    - Fixed typos:
+      - sucess -> success
+      - cout -> count
+    - Removed global LEX_PROFILER definition
+    - Refactored profiler
+    - Added colorful output for lex_print_profiler
+    - Added lex_curpos_str
+    - Added lex_read_file
+    - Exposed lex_idchar, and created kebab case variant
+      - Added lex_builtin_rule_id_kebab
+    - General refactory
+
+[33mcommit 6279c666544610e5a874dd4bad530aa32cadbcf7[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 23 23:46:58 2026 -0300
+
+    Added strpped prefix for lex_print_styles and lex_print_repl
+
+[33mcommit 1f0f5dff7a0cc14ab67029aafc54b176f958de8d[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 23 23:38:36 2026 -0300
+
+    Fixed error on builtin id rule
+
+[33mcommit d1096a60993a66b36565203e26dc3a8bc2973353[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 23 15:34:19 2026 -0300
+
+    Added MIT/Public Domain LICENSE file
+
+[33mcommit 0a2cc03c9674b410c12eb96cccf3c6da2df5c544[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 23 00:53:17 2026 -0300
+
+    Freed getline buffer after closing REPL
+
+[33mcommit fec9ac7cd524329c3e70fc92b20553dfd944911e[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 23 00:51:48 2026 -0300
+
+    Added a debug REPL
+
+[33mcommit 198c1b936aa2694d5f6439ce826b1c20a2f4a2b0[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Wed Jan 21 11:17:17 2026 -0300
+
+    README update
+
+[33mcommit ee9ece12e53d41a8d54572c607aed65541c3259e[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Wed Jan 21 11:01:14 2026 -0300
+
+    Create a new showcase: calc.c
+
+[33mcommit 72fa3798566ff9875515c5ee3215e870eb1fc097[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Mon Jan 19 17:31:38 2026 -0300
+
+    Improved profiler
+
+[33mcommit dcd4b18f5ea5a1e9b111cca454f0b2c605cae139[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Mon Jan 19 13:21:51 2026 -0300
+
+    Refactory, Fixes, and changes to the api
+    - LexCursor source field is now `restrict`
+    - `lex_match_wrapped` and `lex_match_region` has a new argument for optional multiline behavior
+    - `lex_print_hl` is now visually reporting about invalid tokens.
+    - Exposing a new funtion `lex_print_style` which returns the color code used by `lex_print_hl`
+    - `lex_curpos` is no longer a dumb alias for `lex_curline` and `lex_curcol`, it now has it's own implementation, with a single loop.
+
+[33mcommit 0b03778fb20578903a54ab3875f6eb192f3340a7[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Sun Jan 18 18:18:14 2026 -0300
+
+    Added basic profiling + Refactory
+
+[33mcommit ce014ddc34b618837e6bad2cfa600866aa88bfae[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Sun Jan 18 15:42:09 2026 -0300
+
+    Added null terminator at end of buffer on lex_tkstr_dup
+
+[33mcommit b6563d2c04842b34195878c60df8df52379b7a2c[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Sat Jan 17 19:41:08 2026 -0300
+
+    Added README.md
+
+[33mcommit b6e6dda2c19520221f7307c7a8d1a7e3393e9fa7[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Sat Jan 17 15:20:33 2026 -0300
+
+    Breaking changes: Refactored and added new features
+    - Renamed LexTokenMap and LexTokenDef to LexTypeArray and LexType (this change also affects all fields, and macros that refers to it)
+    - Added print_types
+    - Updated documentation and showcases
+    - Added new example showcases
+    - Added new LEX_ETYPE macro
+
+[33mcommit 9f8f088dfe5e80ae702aa0a3fd232e7395ed2fa1[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 16 20:21:14 2026 -0300
+
+    Fixed inline warnings
+    - When no implementation is defined, inline kwords is ommited to precents warnings
+
+[33mcommit 67142dbf72a00aa6f58b42b226ed5079fe5faa6c[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 16 20:05:47 2026 -0300
+
+    Added lex_move_to / New bf showcase
+
+[33mcommit ebe25b57a55e9c12846ab50e9643e3b39ac67185[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 16 17:59:09 2026 -0300
+
+    Quick refactor
+    
+    - Added inline for small functions
+    - Fixed wrong name
+    - Updated showcases
+
+[33mcommit 2bb71d2f1a0f9b1f1e2fb06bc03ff85adde3271c[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 16 16:27:30 2026 -0300
+
+    Added new builtin rules | new pre-include options | more
+    
+    - builtin rules can now be disabled by LEX_DISABLE_BUILTIN_RULES
+
+[33mcommit 6aa7bf78022c0d9138b0f6f95b80d83d99767e5e[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 16 15:30:52 2026 -0300
+
+    Added new library features
+    
+    - lex_curmove: move cursor N bytes
+    - lex_match_exact(n): perform perfect matches over cursor position
+    - lex_match_region: match region by prefix/suffix
+
+[33mcommit dae8ff4afce5d6a4fd740be1d13603a91b8ea505[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 16 14:27:57 2026 -0300
+
+    Updated showcases and created lex_print_hl
+
+[33mcommit 53f2760457075d5cd78bed53cf863eb388fd886e[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Fri Jan 16 00:31:23 2026 -0300
+
+    Added showcases, new match functions, and more
+
+[33mcommit fa4f43d9f6463d5178131e28374caa2c6a6598c6[m
+Author: Raffa064 <raffaddtg@gmail.com>
+Date:   Thu Jan 15 19:25:46 2026 -0300
+
+    First commit
+    
+    A lot of things done.

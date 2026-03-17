@@ -1186,8 +1186,8 @@ LexStringView lex_view_after(LexCursor cursor) {
 }
 
 char* lex_view_dupstr(LexStringView sv) {
-  size_t len = lex_view_count(sv) + 1;
-  char *dup = malloc(len);
+  size_t len = lex_view_count(sv);
+  char *dup = malloc(len + 1);
   memcpy(dup, sv.begin, len);
   dup[len] = '\0';
 
@@ -1203,7 +1203,7 @@ bool lex_view_eq(LexStringView sv1, LexStringView sv2) {
     return false;
 
   const char *p1 = sv1.begin, *p2 = sv2.begin;
-  while (p1 != sv1.end || p2 != sv2.end) {
+  while (p1 != sv1.end) {
     if (*p1 != *p2)
       return false;
 
@@ -1524,7 +1524,7 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 
   size_t total = 0;
   while (total < fsize) {
-    size_t n = fread(content, 1, fsize, file);
+    size_t n = fread(content, 1, fsize - total, file);
 
     if (n == 0) {
       if (ferror(file)) {
