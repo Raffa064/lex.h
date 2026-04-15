@@ -4,7 +4,7 @@
 #ifndef LEX_H
 #define LEX_H
 
-#define LEX_VERSION 2
+#define LEX_VERSION 3
 
 /*
  * ABOUT
@@ -190,10 +190,26 @@
 
 
 #ifdef LEX_USE_XMACRO
+
+// Automatic enum definition for XTABLE
 #define __LEX_ENUMX_FILTER(id, ...)id,
 #define LEX_ENUMX(XTABLE) enum { XTABLE(__LEX_ENUMX_FILTER) XTABLE##_COUNT }
+
+// Create a static LexType array using XTABLE
 #define __LEX_TYPEX_FILTER(...) LEX_TYPE(__VA_ARGS__),
 #define LEX_TYPEX(XTABLE) { XTABLE(__LEX_TYPEX_FILTER) }
+
+// Automatically forward declare all rules on a XTABLE
+#define __LEX_XFORWARD_DECL_FILTER(_, rule_fn, ...) size_t rule_fn(LexCursor cursor); 
+#define LEX_XFORWARD_DECL(XTABLE) XTABLE(__LEX_XFORWARD_DECL_FILTER)
+
+// This macro pushes single source of truth to it's limits!
+// It will create a enum of types, a LexType array, and forward declarations for each rule!
+#define LEX_XMACRO_FRAMEWORK(XTABLE, XEnum, x_types) \
+  typedef LEX_ENUMX(XTABLE) XEnum; \
+  LEX_XFORWARD_DECL(XTABLE); \
+  LexType x_types[XTABLE##_COUNT] = LEX_TYPEX(XTABLE)
+  
 
 /*
  * Using X-macros you can make really cool stuff in lex.h, pushing single source of truth to it's limits:
@@ -260,7 +276,7 @@ typedef struct {
 } LexCursorPosition; 
 
 typedef struct {
-  const char *restrict source;
+  const char *source;
   size_t index, length;
 } LexCursor;
 
@@ -362,12 +378,6 @@ bool lex_current(Lex* l, LEX_OPTIONAL LexResult* result);
  * otherwise.
  */
 bool lex_consume(Lex* l, LEX_OPTIONAL LexToken* tk, LexTypeIndex id);
-
-/*
- * Matches N tokens ahead with a specific structure. 
- * You can optionally pass NULL for 'out' if you don't care about retrieving tokens.
- */
-bool lex_consume_struct(Lex *l, LEX_OPTIONAL LexToken *out, LexStruct *_struct, size_t count); 
 
 /*
  * Consume a single token reguardless of it's type.
@@ -585,9 +595,39 @@ LEX_INLINE size_t lex_view_count(LexStringView sv);
 bool lex_view_eq(LexStringView sv1, LexStringView sv2);
 
 /*
+ * Compare string views and null-terminated cstr, and return true if they're equals to each other
+ */
+LEX_INLINE bool lex_view_eq_cstr(LexStringView sv, const char *cstr);
+
+/*
+ * Chops out caracteres from the left and right of a string view
+ */
+LexStringView lex_view_chop(LexStringView sv, size_t left, size_t right);
+
+/*
+ * Trim spaces from the left of a string view
+ */
+LexStringView lex_view_trim_left(LexStringView sv);
+
+/*
+ * Trim spaces from the right of a string view
+ * /
+LexStringView lex_view_trim_right(LexStringView sv);
+
+/*
+ * Trim both ends os string view
+ */
+LEX_INLINE LexStringView lex_view_trim(LexStringView sv);
+
+/*
+ * Retunrs true if a string is empty
+ */
+LEX_INLINE bool lex_view_empty(LexStringView sv);
+
+/*
  * Remove prefix/suffix (like quotes) from a string view
  */
-LexStringView lex_view_unwrap(LexStringView sv, size_t offset);
+LEX_INLINE LexStringView lex_view_unwrap(LexStringView sv, size_t offset);
 
 /*
  * This function returns the color code for the given type.
@@ -609,7 +649,6 @@ void lex_print_hl(Lex l, bool print_caption);
  * It will print all type names in a sianlge line
  */
 void lex_print_types(Lex l);
-
 
 /*
  * It works as an iteractive mode for 'lex_print_hl'.
@@ -840,34 +879,6 @@ bool lex_consume(Lex* l, LEX_OPTIONAL LexToken* tk, LexTypeIndex id) {
 
   return false;
 }
-
-bool lex_consume_struct(Lex *l, LEX_OPTIONAL LexToken *out, LexStruct *_struct, size_t count) {
-  Lex b = LEX_BRANCH(l);
-  
-  for (size_t i = 0; i < count; i++) {
-    LexStruct strct = _struct[i];
-  
-    LexToken tk;
-    Lex c = LEX_BRANCH(&b);
-    if (!lex_consume(&c, &tk, strct.type))
-      return false;
-    
-    if (strct.match) {
-      if (strcmp(lex_tkstr_tmp(tk), strct.match) != 0)
-        return false; // do not matches
-    }
-
-    if (out) 
-      out[i] = tk;
-    
-    LEX_MERGE_BRANCH(&b, c);
-  }
-
-  LEX_MERGE_BRANCH(l, b);
-
-  return true;
-}
-
 
 bool lex_consume_any(Lex *l, LEX_OPTIONAL LexToken *tk) {
   if (lex_current(l, NULL)) {
@@ -1213,16 +1224,44 @@ bool lex_view_eq(LexStringView sv1, LexStringView sv2) {
   return true;
 }
 
+bool lex_view_eq_cstr(LexStringView sv, const char *cstr) {
+  return lex_view_eq(sv, lex_view(cstr));
+}
+
+LexStringView lex_view_chop(LexStringView sv, size_t left, size_t right) {
+  sv.begin += left;
+  if (sv.begin > sv.end) sv.begin = sv.end;
+  
+  sv.end -= right;
+  if (sv.end < sv.begin) sv.end = sv.begin;
+
+  return sv;
+}
+
+LexStringView lex_view_trim_left(LexStringView sv) {
+  while (isspace(sv.begin[0]) && !lex_view_empty(sv))
+    sv = lex_view_chop(sv, 1, 0);
+
+  return sv;
+}
+
+LexStringView lex_view_trim_right(LexStringView sv) {
+  while (isspace(sv.end[-1]) && !lex_view_empty(sv))
+    sv = lex_view_chop(sv, 0, 1);
+
+  return sv;
+}
+
+LexStringView lex_view_trim(LexStringView sv) {
+  sv = lex_view_trim_left(sv);
+  sv = lex_view_trim_right(sv);
+  return sv;
+}
+
+bool lex_view_empty(LexStringView sv) { return sv.begin >= sv.end; }
+
 LexStringView lex_view_unwrap(LexStringView sv, size_t offset) {
-  LexStringView sv2 = (LexStringView) {
-    .begin = sv.begin + offset,
-    .end = sv.end - offset
-  };
-
-  if (sv2.end < sv2.begin)
-    sv2.end = sv2.begin;
-
-  return sv2;
+  return lex_view_chop(sv, offset, offset);
 }
 
 const char* lex_print_style(LexTypeIndex type) {
@@ -1587,6 +1626,8 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 #ifdef LEX_USE_XMACRO
   #define ENUMX LEX_ENUMX
   #define TYPEX LEX_TYPEX
+  #define XFORWARD_DECL LEX_XFORWARD_DECL
+  #define XMACRO_FRAMEWORK LEX_XMACRO_FRAMEWORK
 #endif
 
 /// NO PREFIX STRUCTURES
@@ -1603,7 +1644,6 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 #define init lex_init
 #define current lex_current
 #define consume lex_consume
-#define consume_struct lex_consume_struct
 #define consume_any lex_consume_any
 #define skipn lex_skipn
 #define skip(l, id, match) lex_skip // This skip macro conflicts with skip flag from LexTypeOptions
@@ -1633,6 +1673,12 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 #define view_dupstr lex_view_dupstr
 #define view_count lex_view_count
 #define view_eq lex_view_eq
+#define view_eq_cstr lex_view_eq_cstr
+#define view_chop lex_view_chop
+#define view_trim_left lex_view_trim_left
+#define view_trim_right lex_view_trim_right
+#define view_trim lex_view_trim
+#define view_empty lex_view_empty
 #define view_unwrap lex_view_unwrap
 #define print_hl lex_print_hl
 #define print_types lex_print_types
