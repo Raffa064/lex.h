@@ -206,10 +206,9 @@
 // This macro pushes single source of truth to it's limits!
 // It will create a enum of types, a LexType array, and forward declarations for each rule!
 #define LEX_XMACRO_FRAMEWORK(XTABLE, XEnum, x_types) \
-  typedef LEX_ENUMX(XTABLE) XEnum; \
   LEX_XFORWARD_DECL(XTABLE); \
-  LexType x_types[XTABLE##_COUNT] = LEX_TYPEX(XTABLE)
-  
+  typedef LEX_ENUMX(XTABLE) XEnum; \
+  static LexType x_types[XTABLE##_COUNT] = LEX_TYPEX(XTABLE) 
 
 /*
  * Using X-macros you can make really cool stuff in lex.h, pushing single source of truth to it's limits:
@@ -611,7 +610,7 @@ LexStringView lex_view_trim_left(LexStringView sv);
 
 /*
  * Trim spaces from the right of a string view
- * /
+ */
 LexStringView lex_view_trim_right(LexStringView sv);
 
 /*
