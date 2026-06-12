@@ -28,7 +28,6 @@
 #include <stdio.h>
 #include <stdlib.h> 
 #include <stdbool.h>
-#include <errno.h>
 #include <stdint.h>
 
 #ifdef LEX_PROFILER
@@ -39,6 +38,7 @@
 #include <ctype.h>
 #include <stddef.h>
 #include <string.h>
+#include <errno.h>
 #endif // LEX_IMPLEMENTATION
 
 /// MACROS
@@ -208,7 +208,7 @@
 #define LEX_XMACRO_FRAMEWORK(XTABLE, XEnum, x_types) \
   LEX_XFORWARD_DECL(XTABLE); \
   typedef LEX_ENUMX(XTABLE) XEnum; \
-  static LexType x_types[XTABLE##_COUNT] = LEX_TYPEX(XTABLE) 
+  [[maybe_unused]] static LexType x_types[XTABLE##_COUNT] = LEX_TYPEX(XTABLE) 
 
 /*
  * Using X-macros you can make really cool stuff in lex.h, pushing single source of truth to it's limits:
@@ -348,6 +348,17 @@ typedef enum {
   LEX_EOF = 0,
   LEX_SUCCESS = 1,
 } LexResult;
+
+
+#include <stdint.h>
+
+#if UINTPTR_MAX == 0xffffffff
+typedef int32_t lex_ssize_t;
+#elif UINTPTR_MAX == 0xffffffffffffffff
+typedef int64_t lex_ssize_t;
+#else
+#error Unsupported architecture
+#endif
 
 /// FOWARD DECLARATIONS
 
@@ -548,7 +559,7 @@ const char* lex_cursor_pos_str(LexCursor cursor);
 /*
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
  */
-LEX_INLINE void lex_cursor_move(LexCursor *cursor, ssize_t N);
+LEX_INLINE void lex_cursor_move(LexCursor *cursor, lex_ssize_t N);
 
 /*
  * Returns the index for the begining of the line where the cursor is.
@@ -1080,6 +1091,8 @@ char* lex_tkstr_dup(LexToken tk) {
 }
 
 size_t lex_cursor_col(LexCursor cursor) {
+  if (lex_cursor_ch(cursor) == '\n') lex_cursor_move(&cursor, -1);
+
   size_t column = 1;
 
   while (cursor.index > 0) {
@@ -1095,6 +1108,8 @@ size_t lex_cursor_col(LexCursor cursor) {
 }
 
 size_t lex_cursor_line(LexCursor cursor) {
+  if (lex_cursor_ch(cursor) == '\n') lex_cursor_move(&cursor, -1);
+  
   size_t lineno = 1;
   while(cursor.index > 0) {
     lex_cursor_move(&cursor, -1);
@@ -1155,18 +1170,22 @@ const char* lex_cursor_pos_str(LexCursor cursor) {
   return tmp;
 }
 
-void lex_cursor_move(LexCursor *cursor, ssize_t N) {
+void lex_cursor_move(LexCursor *cursor, lex_ssize_t N) {
   cursor->index += N;
 }
 
 size_t lex_cursor_line_start(LexCursor cursor) {
+  if (lex_cursor_ch(cursor) == '\n') lex_cursor_move(&cursor, -1);
+
   while (cursor.index > 0 && lex_cursor_ch(cursor) != '\n')
     lex_cursor_move(&cursor, -1);
 
-  return cursor.index + 1;
+  return cursor.index + 1; 
 }
 
 size_t lex_cursor_line_end(LexCursor cursor) {
+  if (lex_cursor_ch(cursor) == '\n') return cursor.index;
+
   while (lex_cursor_ch(cursor) != '\0' && lex_cursor_ch(cursor) != '\n')
     lex_cursor_move(&cursor, 1);
 
@@ -1432,7 +1451,7 @@ void lex_repl(LexTypeArray types) {
   while (!feof(stdin)) {
     printf(">> "), fflush(stdout);
 
-    ssize_t len = getline(&input, &input_capacity, stdin);
+    lex_ssize_t len = getline(&input, &input_capacity, stdin);
     if (len > 0) {
       if (input[len - 1] == '\n')
         input[len - 1] = '\0';
