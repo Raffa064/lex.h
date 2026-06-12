@@ -408,7 +408,6 @@ void lex_move_to(Lex* l, LexCursor to);
  */
 void lex_move(Lex* l);
 
-
 /*
  * This function returns true when there is a token to be processed, even when it's not a valid token.
  */
@@ -484,6 +483,19 @@ size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len);
  * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
  */
 LEX_INLINE size_t lex_match_exact(LexCursor cursor, const char* match);
+
+typedef bool (*lex_predicate_fn)(char);
+
+/*
+ * Utilitary function for matching charactes while a condition is satisfied.
+ * It's useful for matching groups of characters like numbers or letters.
+ *
+ * 'pred' is a function that receives a char and returns true if the char
+ * is part of the match.
+ *
+ * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
+ */
+size_t lex_match_while(LexCursor cursor, lex_predicate_fn pred);
 
 /*
  * Matches input chas with [a-zA-Z$_] or [a-zA-Z$_0-9] depending on 'allow_numbers'.
@@ -1037,6 +1049,15 @@ size_t lex_match_exact(LexCursor cursor, const char* match) {
   return lex_match_exactn(cursor, match, strlen(match));
 }
 
+size_t lex_match_while(LexCursor cursor, lex_predicate_fn pred) {
+  const char *str = lex_cursor_str(cursor);
+
+  size_t len = LEX_NO_MATCH;
+  while (str[len] != '\0' && pred(str[len])) len++;
+
+  return len;
+}
+
 const char* lex_tkstr_tmp(LexToken tk) {
   static char buf[1024];
 
@@ -1457,6 +1478,7 @@ size_t lex_builtin_rule_ws(LexCursor cursor) {
 
   return len; 
 }
+
 
 bool lex_idchar(char ch, bool allow_numbers) {
   return isalpha(ch) 
