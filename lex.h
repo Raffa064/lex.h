@@ -868,23 +868,26 @@ bool lex_current(Lex* l, LEX_OPTIONAL LexResult* result) {
 
   return false;
 }
- 
 
 bool lex_consume(Lex* l, LEX_OPTIONAL LexToken* tk, LexTypeIndex id) { 
+  Lex b = LEX_BRANCH(l);
+
 #ifdef LEX_PROFILER
-  l->profiler_data.lex_consume.call_count++;
+  b.profiler_data.lex_consume.call_count++;
 #endif
 
-  if (lex_current(l, NULL)) {
-    if (l->tk.id == id) {
+  if (lex_current(&b, NULL)) {
+    if (b.tk.id == id) {
       if (tk)
-        *tk = l->tk;
+        *tk = b.tk;
 
-      lex_move(l);
+      lex_move(&b);
 
 #ifdef LEX_PROFILER
-      l->profiler_data.lex_consume.success_count++;
+      b.profiler_data.lex_consume.success_count++;
 #endif
+
+      LEX_MERGE_BRANCH(l, b);
       return true;
     }
   }
