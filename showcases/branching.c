@@ -40,7 +40,7 @@ int main() {
   clock_gettime(CLOCK_MONOTONIC,  &time);
   srand(time.tv_nsec);
 
-  Lex l = lex_init(LEX_TYPEARRAY(types), NULL); // It will crash
+  Lex l = lex_init(LEX_TYPEARRAY(types), LEX_SRC(NULL, ""));
 
   Lex target = LEX_BRANCH(&l);
   printf("\e[35mCreated the TARGET branch!\e[0m\n");

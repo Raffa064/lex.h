@@ -56,7 +56,7 @@ int main() {
       if (input[0] == 'q')
         break;
   
-      Lex lex = lex_init(LEX_TYPEARRAY(calc_types), input);
+      Lex lex = lex_init(LEX_TYPEARRAY(calc_types), LEX_SRC(NULL, input));
 
       double result;
       if (eval_expr(&lex, &result)) {
@@ -78,7 +78,8 @@ int main() {
         [ERROR_INVALID_TOKEN]    = "Invalid token.",
       };
       
-      printf("   \e[31m%*s ERROR: %s\e[0m\n", (int)lex_cursor_col(lex.cursor), "^", err_msgs[calc_error]);
+      LexLocation loc = lex_loc(lex);
+      printf("   \e[31m%*s ERROR: %s\e[0m\n", (int)loc.col, "^", err_msgs[calc_error]);
     }
   }
 }

@@ -12,7 +12,7 @@ int main() {
     .length = 7
   };
 
-  LexStringView sv = lex_view_after(cursor);
+  LexStringView sv = lex_view_at_cursor(cursor);
   printf("My sv: '" LEX_SVFMT "'\n", lex_svarg(sv));
 
   LexStringView hw = lex_view("Hello world");

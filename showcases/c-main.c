@@ -33,7 +33,7 @@ size_t rule_term(Cursor cursor);
 size_t rule_number(Cursor cursor);
 
 int main() {
-  Type types[T_COUNT] = {
+  LType types[T_COUNT] = {
     TYPE(T_KWORD,      rule_kword),
     TYPE(T_TERM,       rule_term),
     TYPE(T_NUMBER,     rule_number),
@@ -44,28 +44,27 @@ int main() {
     TYPE(T_ID,         builtin_rule_id),
   };
 
-  Lex l = init(TYPEARRAY(types), 
+  Lex l = l_init(TYPEARRAY(types), SRC("example.c",
     "// This is single line a comment\n"
     "int main() {\n\t"
       "print(\"Hello world\");\n\t"
       "return 0;\n"
     "} /* This comment \n can be multiline! */"
-  );
+  ));
 
   print_hl(l, true);
 
   LexResult result;
-  while (current(&l, &result)) {
-    printf("(%2zu:%2zu) %-10s '%s'\n", cursor_line(l.cursor), cursor_col(l.cursor), tkname(l, l.tk), tkstr_tmp(l.tk));
-    move(&l);
+  while (l_current(&l, &result)) {
+    Location loc = l_loc(l);
+    printf("(" LOCFMT ") %-10s '%s'\n",  locarg(loc), lex_tkname(l, l.tk), lex_tkstr_tmp(l.tk));
+    l_move(&l);
   }
 
   if (result == LEX_INVALID_TOKEN) {
+    Location loc = l_loc(l);
     fprintf(stderr, 
-      "\e[31mErro: (%2zu:%2zu) '%s'\e[0m\n", 
-      cursor_line(l.cursor), 
-      cursor_col(l.cursor), 
-      cursor_str(l.cursor)
+      "\e[31mErro: (" LOCFMT ") '" SVFMT "'\e[0m\n", locarg(loc), svarg(loc.line)
     );
 
     return 1;
@@ -87,7 +86,6 @@ size_t rule_kword(Cursor cursor) {
 
   return NO_MATCH;
 }
-
 
 // '(' | ')' | '{' | '}'
 size_t rule_term(Cursor cursor) {

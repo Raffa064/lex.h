@@ -24,7 +24,7 @@ size_t rule_term(Cursor cursor);
 size_t rule_number(Cursor cursor);
 
 int main() {
-  Type types[T_COUNT] = {
+  LType types[T_COUNT] = {
     TYPE(T_KWORD,      rule_kword),
     TYPE(T_TERM,       rule_term),
     TYPE(T_NUMBER,     rule_number),

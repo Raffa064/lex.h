@@ -36,14 +36,14 @@ LexType json_types[JT_COUNT] = {
 };
 
 int main() {
-  Lex lex = lex_init(LEX_TYPEARRAY(json_types), 
+  Lex lex = lex_init(LEX_TYPEARRAY(json_types), LEX_SRC("example.json",
     "{\n"
     "  \"array\": [ \"str\", 64, .2, false, [] ],\n"
     "  \"some-number\": .1,\n"
     "  \"bool-option\": true,\n"
     "  \"text\": \"Hello world\"\n"
     "}\n"
-  );
+  ));
 
   lex_print_hl(lex, true);
 
@@ -54,16 +54,8 @@ int main() {
   }
 
   if (result == LEX_INVALID_TOKEN) {
-    size_t start = lex_cursor_line_start(lex.cursor);
-    size_t end   = lex_cursor_line_end(lex.cursor);
-   
-    fprintf(stderr, 
-      "\e[31mErro: at %zu:%zu near '%.*s'\e[0m\n", 
-      lex_cursor_line(lex.cursor), 
-      lex_cursor_col(lex.cursor), 
-      (int) (end - start), 
-      lex_source(lex, start)
-    );
+    LexLocation loc = lex_loc(lex);
+    fprintf(stderr, "\e[31mErro: at " LEX_LOCFMT " near '" LEX_SVFMT "'\e[0m\n", lex_locarg(loc), lex_svarg(loc.line));
 
     return 1;
   }

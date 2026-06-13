@@ -19,7 +19,7 @@ LEX_XFORWARD_DECL(EXAMPLE);
 LexType types[EXAMPLE_COUNT] = LEX_TYPEX(EXAMPLE);
 
 int main() {
-  Lex l = lex_init(LEX_TYPEARRAY(types), "this is an example");
+  Lex l = lex_init(LEX_TYPEARRAY(types), LEX_SRC(NULL, "this is an example"));
   lex_print_hl(l, true);
 }
 

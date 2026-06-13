@@ -55,9 +55,10 @@ char* read_file(const char* path) {
 }
 
 int main() {
-  char* input = read_file("./showcases/input.bf");
+  char *path = "./showcases/input.bf";
+  char *input = read_file(path);
 
-  Lex l = lex_init(LEX_TYPEARRAY(bf_tokens), input);
+  Lex l = lex_init(LEX_TYPEARRAY(bf_tokens), LEX_SRC(path, input));
   lex_print_hl(l, true);
 
   char      mem[128]  = {0};

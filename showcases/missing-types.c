@@ -22,7 +22,7 @@ LexType types[TYPE_COUNT] = {
 }; 
 
 int main() {
-  Lex l = lex_init(LEX_TYPEARRAY(types), NULL); // It will crash
+  Lex l = lex_init(LEX_TYPEARRAY(types), LEX_SRC(NULL, NULL)); // It will crash
   
   // Expected error message:
   // "Lex initialization failed due to an missing type definition. TypeIndex '2' is unset: Invalid argument"

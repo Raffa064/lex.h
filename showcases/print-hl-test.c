@@ -159,12 +159,12 @@ LexType abc[COUNT] = {
 };
 
 int main() {
-  Lex abboba = lex_init(LEX_TYPEARRAY(abc),
+  Lex abboba = lex_init(LEX_TYPEARRAY(abc), LEX_SRC(NULL,
     "AA AB AC AD AE AF AG AH AI AJ AK AL AM AN AO AP AQ AR AS AT AU AV AW AX AY AZ\n"
     "BA BB BC BD BE BF BG BH BI BJ BK BL BM BN BO BP BQ BR BS BT BU BV BW BX BY BZ\n"
     "CA CB CC CD CE CF CG CH CI CJ CK CL CM CN CO CP CQ CR CS CT CU CV CW CX CY CZ\n"
     "DA DB DC DD DE DF DG DH DI DJ DK DL DM DN DO DP DQ DR DS DT DU DV DW DX DY DZ\n"
-  );
+  ));
 
   lex_print_hl(abboba, false);
 }

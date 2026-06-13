@@ -4,7 +4,9 @@
 #ifndef LEX_H
 #define LEX_H
 
-#define LEX_VERSION 3
+#define LEX_IMPLEMENTATION // TODO: remove this
+
+#define LEX_VERSION 4
 
 /*
  * ABOUT
@@ -118,6 +120,8 @@
 #define LEX_BRANCH(l_ptr) *(l_ptr)                  // Ex: Lex b = LEX_BRANCH(l);   // Create a branch of l (which is a pointer)
 #define LEX_MERGE_BRANCH(l_ptr, b) *(l_ptr) = (b);  // Ex: LEX_MERGE_BRANCH(l, b);  // Apply changes from b into l
 
+#define LEX_SRC(_file_name, _contents) ((LexSourceInfo) { .content = (_contents), .file_name = (_file_name), })
+
 /*
  * Returns a pointer to the start of the token on the source code.
  * NOTE: It's not null-terminate as the source is ideally imutable.
@@ -137,12 +141,12 @@
 /*
  * Get a pointer for the source code at cursor position.
  */
-#define lex_cursor_str(cursor) ((const char*)(cursor.source + cursor.index))
+#define lex_cursor_str(cursor) ((const char*)((cursor).source + (cursor).index))
 
 /*
  * Get a single char from the source code at the cursor position.
  */
-#define lex_cursor_ch(cursor) ((const char)(cursor.source[cursor.index]))
+#define lex_cursor_ch(cursor) ((const char)((cursor).source[(cursor).index]))
 
 /*
  * Get cursor start index.
@@ -171,12 +175,23 @@
 #define lex_svarg(sv) ((int)lex_view_count(sv)), ((sv).begin)
 
 /*
+ * Format string for LexLocation
+ */
+#define LEX_LOCFMT "%s:%zu:%zu"
+
+/*
+ * Shorthand for using LexLocation inside format strings. 
+ * Ex: printf("sv: " LEX_LOCFMT, lex_locarg(my_loc));
+ */
+#define lex_locarg(loc) (loc).file_name, (loc).row, (loc).col
+
+/*
  * You can use this while creating 'rule functions' to indicate non matching cases.
  */
 #define LEX_NO_MATCH 0
 
 #ifdef LEX_IMPLEMENTATION
-  // Inline only for implementation prevents warnings
+  // Use 'inline' only for implementation, it prevents warnings
   #define LEX_INLINE inline 
 #else
   #define LEX_INLINE
@@ -271,10 +286,6 @@ void __lex_profiler_merge_branch_wrapper(Lex* l_ptr, Lex b);
 #endif // LEX_PROFILER
 
 typedef struct {
-  size_t lineno, column;
-} LexCursorPosition; 
-
-typedef struct {
   const char *source;
   size_t index, length;
 } LexCursor;
@@ -310,16 +321,25 @@ typedef struct {
 } LexStringView;
 
 typedef struct {
+  // This structure represents that file tags, like "main.c:17:1"
+  // You can use LEX_LOCFMT to print it out
+  const char *file_name;
+  LexStringView line;
+  size_t row, col;
+} LexLocation; 
+
+typedef struct {
   LexStringView sv;
   LexTypeIndex id;
 } LexToken;
 
 typedef struct {
-  LexTypeIndex type;
-  const char* match; // Optional: When set to null, it disables matching by value
-} LexStruct;
+  const char *content;
+  const char *file_name;
+} LexSourceInfo;
 
 struct Lex {
+  LexSourceInfo src;
   LexTypeArray types;
   LexCursor cursor;
   LexToken tk;
@@ -364,10 +384,10 @@ typedef int64_t lex_ssize_t;
 
 /* 
  * Initializes a new lexer object on the stack.
- * It expects a LexTypeArray as fiest argument, which can be
+ * It expects a LexTypeArray as first argument, which can be
  * created with the macro 'LEX_TYPEARRAY'
  */
-Lex lex_init(LexTypeArray types, const char* source);
+Lex lex_init(LexTypeArray types, LexSourceInfo src);
 
 /*
  * Get a token from the current 'l->cursor' position.
@@ -509,12 +529,6 @@ typedef bool (*lex_predicate_fn)(char);
 size_t lex_match_while(LexCursor cursor, lex_predicate_fn pred);
 
 /*
- * Matches input chas with [a-zA-Z$_] or [a-zA-Z$_0-9] depending on 'allow_numbers'.
- * This functions is used internally by 'lex_builtin_rule_id' and 'lex_match_keyword'. 
- */
-LEX_INLINE bool lex_idchar(char ch, bool allow_numbers); 
-
-/*
   * Copy token string value to a internal static buffer.
   * The buffer size is fixed at 1024 bytes, if the token exceeds this limit
   * the string value will be clamped to this maximum value.
@@ -530,31 +544,19 @@ const char* lex_tkstr_tmp(LexToken tk);
 char* lex_tkstr_dup(LexToken tk);
 
 /*
- * Get cursor column position by searching for the first occurrency of 
- * '\n' before the 'cursor->index'. 
- */
-size_t lex_cursor_col(LexCursor cursor);
-
-/*
- * Get cursor line position by scanning all occurrencies of '\n' before 'cursor->index'
- */
-size_t lex_cursor_line(LexCursor cursor);
-
-/*
  * Reset cursor length and position to zero
  */
 LEX_INLINE void lex_cursor_reset(LexCursor *cursor);
 
 /*
- * Get cursor line and column positions as a LexCursorPosition object. 
- * That's an alias for both  'lex_cursor_col' and 'lex_cursor_line'.
+ * Get cursor location, with file name, line view, number and offset as a LexLocation object.
  */
-LEX_INLINE LexCursorPosition lex_cursor_pos(LexCursor cursor);
+LexLocation lex_loc(Lex l);
 
 /*
- * Returns a tmp string for the cursor position in the format "<line>:<column" (Ex: "64:3")
+ * Returns the index for both ends of the current line where the cursor is.
  */
-const char* lex_cursor_pos_str(LexCursor cursor);
+void lex_cursor_line_bounds(LexCursor cursor, LEX_OPTIONAL size_t *start, LEX_OPTIONAL size_t *end); 
 
 /*
  * Move cursor by N chars. N could be a negative value, meaning that the cursor will mobe backward.
@@ -562,44 +564,27 @@ const char* lex_cursor_pos_str(LexCursor cursor);
 LEX_INLINE void lex_cursor_move(LexCursor *cursor, lex_ssize_t N);
 
 /*
- * Returns the index for the begining of the line where the cursor is.
+ * LexStringView contructor:
+ * Create a string view from source using specified indexes
  */
-size_t lex_cursor_line_start(LexCursor cursor); 
+LexStringView lex_view_bounds(const char *src, size_t begin, size_t end);
 
 /*
- * Returng the index for the end of the line where the cursor is.
- */
-size_t lex_cursor_line_end(LexCursor cursor);
-
-/*
+ * LexStringView contructor:
  * Create a string view from a length-based c-string
  */
 LEX_INLINE LexStringView lex_viewn(const char* cstr, size_t count);
 
 /*
+ * LexStringView contructor:
  * Create a string view from a null-terminated c-string
  */
 LEX_INLINE LexStringView lex_view(const char* cstr);
 
 /*
- * Returns a string view of the source code
- */
-LEX_INLINE LexStringView lex_view_src(Lex l);
-
-/*
- * Returns a string view of the source code before/after cursor position.
- */
-LEX_INLINE LexStringView lex_view_before(LexCursor);
-
-/*
  * Returns a string view of the current token selection
  */
-LEX_INLINE LexStringView lex_view_at(LexCursor cursor);
-
-/*
- * Returns a string view of the source code before/after cursor position.
- */
-LEX_INLINE LexStringView lex_view_after(LexCursor);
+LEX_INLINE LexStringView lex_view_at_cursor(LexCursor cursor);
 
 /*
  * Returns a heap allocated null-terminated c-string copy of a string view.
@@ -652,6 +637,11 @@ LEX_INLINE bool lex_view_empty(LexStringView sv);
 LEX_INLINE LexStringView lex_view_unwrap(LexStringView sv, size_t offset);
 
 /*
+ * Create a string view of the current line using lex_cursor_line_bounds 
+ */
+LexStringView lex_view_current_line(Lex l);
+
+/*
  * This function returns the color code for the given type.
  *
  * Actually, it has a limited amout of colors and styles which rotates when it overflows.
@@ -701,14 +691,15 @@ void lex_print_profiler(Lex l);
 size_t lex_builtin_rule_ws(LexCursor cursor);
 
 /*
- * Matches input char with [a-Z_$] (could optionally match with numbers too)
+ * Matches input chas with [a-zA-Z$_] or [a-zA-Z$_0-9] depending on 'allow_numbers'.
+ * This functions is used internally by 'lex_builtin_rule_id' and 'lex_match_keyword'. 
  */
-bool lex_idchar(char ch, bool allow_numbers);
+LEX_INLINE bool lex_idchar(char ch, bool allow_numbers); 
 
 /*
  * Matches input char with [a-Z_$\-] (could optionally match with numbers too)
  */
-bool lex_idchar_kebab(char ch, bool allow_numbers);
+LEX_INLINE bool lex_idchar_kebab(char ch, bool allow_numbers);
 
 /*
  * Built-in rule for Identifiers following the most common pattern found on modern languages,
@@ -784,7 +775,7 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size);
 
 #ifdef LEX_IMPLEMENTATION
 
-Lex lex_init(LexTypeArray types, const char* source) {
+Lex lex_init(LexTypeArray types, LexSourceInfo src) {
   LexType unset = {0};
 
   for (size_t i = 0; i < types.count; i++) {
@@ -797,9 +788,10 @@ Lex lex_init(LexTypeArray types, const char* source) {
     }
   }
 
-  return (Lex){
+  return (Lex) {
+    .src = src,
     .types = types,
-    .cursor = { .source = source,}
+    .cursor = { .source = src.content,}
   };
 }
 
@@ -853,7 +845,7 @@ bool lex_current(Lex* l, LEX_OPTIONAL LexResult* result) {
 
       l->cursor = cursor;
       l->tk = (LexToken){
-        .sv = lex_view_at(cursor),
+        .sv = lex_view_at_cursor(cursor),
         .id = id,
       };
       l->has_token = true;
@@ -1046,7 +1038,6 @@ size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix
   return LEX_NO_MATCH;  
 }
 
-
 size_t lex_match_exactn(LexCursor cursor, const char* match, size_t len) {
   const char *str = lex_cursor_str(cursor);
 
@@ -1090,106 +1081,60 @@ char* lex_tkstr_dup(LexToken tk) {
   return buf;
 }
 
-size_t lex_cursor_col(LexCursor cursor) {
-  if (lex_cursor_ch(cursor) == '\n') lex_cursor_move(&cursor, -1);
-
-  size_t column = 1;
-
-  while (cursor.index > 0) {
-    lex_cursor_move(&cursor, -1);
-    
-    if (lex_cursor_ch(cursor) == '\n')
-      break;      
-
-    column++;
-  }
-  
-  return column;
-}
-
-size_t lex_cursor_line(LexCursor cursor) {
-  if (lex_cursor_ch(cursor) == '\n') lex_cursor_move(&cursor, -1);
-  
-  size_t lineno = 1;
-  while(cursor.index > 0) {
-    lex_cursor_move(&cursor, -1);
-    
-    if (lex_cursor_ch(cursor) == '\n')
-      lineno++;
-  }
-
-  return lineno;
-}
-
 void lex_cursor_reset(LexCursor *cursor) {
   cursor->index = cursor->length = 0;
 }
 
-LexCursorPosition lex_cursor_pos(LexCursor cursor) {
-  size_t lineno = 1;
-  size_t column = 1;
+LexLocation lex_loc(Lex l) {
+  size_t row = 1;
+  for (size_t i = 0; i < lex_cursor_start(l.cursor); i++)
+    if (*lex_source(l, i) == '\n') row++;
 
-  LexCursor l = cursor, c = cursor;
+  size_t col = 1;
+  for (size_t i = lex_cursor_start(l.cursor); i > 0; i--)
+    if (*lex_source(l, i - 1) == '\n') break; 
+    else col++;
 
-  bool l_stop = true; 
-  bool c_stop = true;
-  do {
-    l_stop &= l.index > 0;
-    c_stop &= c.index > 0;
-
-    if (l_stop) {
-      lex_cursor_move(&l, -1);
-      if (lex_cursor_ch(l) == '\n')
-        lineno++;
-    }
-
-    if (c_stop) {
-      lex_cursor_move(&c, -1);
-
-      if (lex_cursor_ch(c) != '\n') {
-        column++;
-      } else c_stop = false;
-    }
-
-    if (!(l_stop || c_stop))
-      break;
-  } while(1);
-
-  return (LexCursorPosition) { 
-    .lineno = lineno, 
-    .column = column,
+  return (LexLocation) { 
+    .file_name = l.src.file_name,
+    .line      = lex_view_current_line(l),
+    .row       = row, 
+    .col       = col,
   };
 }
 
-const char* lex_cursor_pos_str(LexCursor cursor) {
-  LexCursorPosition pos = lex_cursor_pos(cursor);
-  
-  static char tmp[32];
-  sprintf(tmp, "%zu:%zu", pos.lineno, pos.column);
-  
-  return tmp;
-}
+void lex_cursor_line_bounds(LexCursor cursor, size_t *start, size_t *end) {
+  if (start) *start = cursor.index == 0? 0 : (cursor.index - 1);
+  if (end)   *end = cursor.index; 
+
+  const char *src = cursor.source;
+  while (start || end) {
+    if (start) {
+      size_t look_behind = (*start) -1;
+      if (start == 0 || src[look_behind] == '\n')
+        start = NULL;
+      else 
+        (*start)--;
+    }
+
+    if (end) {
+      if (src[*end] == '\n' || src[*end] == '\0')
+        end = NULL;
+      else
+        (*end)++;
+    }
+  }
+} 
 
 void lex_cursor_move(LexCursor *cursor, lex_ssize_t N) {
   cursor->index += N;
 }
 
-size_t lex_cursor_line_start(LexCursor cursor) {
-  if (lex_cursor_ch(cursor) == '\n') lex_cursor_move(&cursor, -1);
-
-  while (cursor.index > 0 && lex_cursor_ch(cursor) != '\n')
-    lex_cursor_move(&cursor, -1);
-
-  return cursor.index + 1; 
-}
-
-size_t lex_cursor_line_end(LexCursor cursor) {
-  if (lex_cursor_ch(cursor) == '\n') return cursor.index;
-
-  while (lex_cursor_ch(cursor) != '\0' && lex_cursor_ch(cursor) != '\n')
-    lex_cursor_move(&cursor, 1);
-
-  return cursor.index;
+LexStringView lex_view_bounds(const char *src, size_t begin, size_t end) {
+  return (LexStringView) { 
+    .begin = src + begin,
+    .end = src + end 
+  };
 }
 
 LexStringView lex_viewn(const char* cstr, size_t count) {
@@ -1203,35 +1148,12 @@ LexStringView lex_view(const char* cstr) {
   return lex_viewn(cstr, strlen(cstr));
 }
 
-LexStringView lex_view_src(Lex l) {
-  return (LexStringView) {
-    .begin = l.cursor.source,
-    .end = l.cursor.source + strlen(l.cursor.source)
-  };
-}
-
-LexStringView lex_view_before(LexCursor cursor) {
-  return (LexStringView) {
-    .begin = cursor.source,
-    .end = lex_cursor_str(cursor)
-  };
-}
-
-LexStringView lex_view_at(LexCursor cursor) {
+LexStringView lex_view_at_cursor(LexCursor cursor) {
   const char* cursor_str = lex_cursor_str(cursor);
 
   return (LexStringView) {
     .begin = cursor_str,
     .end = cursor_str + cursor.length
-  };
-}
-
-LexStringView lex_view_after(LexCursor cursor) {
-  const char* cursor_str = lex_cursor_str(cursor) + cursor.length;
-
-  return (LexStringView) {
-    .begin = cursor_str,
-    .end = cursor_str + strlen(cursor_str)
   };
 }
 
@@ -1301,6 +1223,14 @@ bool lex_view_empty(LexStringView sv) { return sv.begin >= sv.end; }
 
 LexStringView lex_view_unwrap(LexStringView sv, size_t offset) {
   return lex_view_chop(sv, offset, offset);
+}
+
+LexStringView lex_view_current_line(Lex l) {
+  size_t begin, end;
+  lex_cursor_line_bounds(l.cursor, &begin, &end);
+
+  const char* content = l.src.content;
+  return lex_view_bounds(l.src.content, begin, end);
 }
 
 const char* lex_print_style(LexTypeIndex type) {
@@ -1456,7 +1386,7 @@ void lex_repl(LexTypeArray types) {
       if (input[len - 1] == '\n')
         input[len - 1] = '\0';
 
-      Lex l = lex_init(types, input);
+      Lex l = lex_init(types, LEX_SRC(NULL, input));
 
       if (strncmp(input, "h", input_capacity) == 0) {
         printf("You are in the Lex.h Debug REPL.\n");
@@ -1628,11 +1558,10 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
 
 #endif // LEX_IMPLEMENTATION
 
-
 #ifdef LEX_STRIP_PREFIX
 
 /*
- * By defining this macro before including lex.h, you'll be able to
+ * By defining LEX_STRIP_PREFIX before including lex.h, you'll be able to
  * access any libray symbol without prefixing with 'lex'.
  *
  * NOTE: If there's some naming conflics with your project libraries,
@@ -1646,101 +1575,114 @@ char *lex_read_file(const char *path, LEX_OPTIONAL size_t *out_file_size) {
  */
 
 /// NO PREFIX MACROS
-#define NO_MATCH LEX_NO_MATCH
-#define TYPEARRAY LEX_TYPEARRAY
-#define TYPE LEX_TYPE
-#define ETYPE LEX_ETYPE
-#define BRANCH LEX_BRANCH
-#define MERGE_BRANCH LEX_MERGE_BRANCH
-#define tkstr lex_tkstr
-#define tklen lex_tklen
-#define tkname lex_tkname
-#define cursor_str lex_cursor_str
-#define cursor_ch lex_cursor_ch
-#define cursor_start lex_cursor_start
-#define cursor_end lex_cursor_end
-// #define source lex_source  // Too generic to be exported...
-#define SVFMT LEX_SVFMT
-#define svarg lex_svarg
+
+#define NO_MATCH       LEX_NO_MATCH
+#define TYPEARRAY      LEX_TYPEARRAY
+#define TYPE           LEX_TYPE
+#define ETYPE          LEX_ETYPE
+#define BRANCH         LEX_BRANCH
+#define MERGE_BRANCH   LEX_MERGE_BRANCH
+#define SRC            LEX_SRC
+#define OPTIONAL       LEX_OPTIONAL
+#define COLOR_RESET    LEX_COLOR_RESET
+#define tkstr          lex_tkstr
+#define tklen          lex_tklen
+#define tkname         lex_tkname
+#define cursor_str     lex_cursor_str
+#define cursor_ch      lex_cursor_ch
+#define cursor_start   lex_cursor_start
+#define cursor_end     lex_cursor_end
+#define l_source       lex_source // too generic
+#define SVFMT          LEX_SVFMT
+#define svarg          lex_svarg
+#define LOCFMT         LEX_LOCFMT
+#define locarg         lex_locarg
 
 #ifdef LEX_USE_XMACRO
-  #define ENUMX LEX_ENUMX
-  #define TYPEX LEX_TYPEX
-  #define XFORWARD_DECL LEX_XFORWARD_DECL
+  #define ENUMX            LEX_ENUMX
+  #define TYPEX            LEX_TYPEX
+  #define XFORWARD_DECL    LEX_XFORWARD_DECL
   #define XMACRO_FRAMEWORK LEX_XMACRO_FRAMEWORK
 #endif
 
 /// NO PREFIX STRUCTURES
-#define CursorPosition LexCursorPosition
-#define Cursor LexCursor
-#define TypeOptions LexTypeOptions
-#define Type LexType
-#define TypeArray LexTypeArray
-#define TypeIndex LexTypeIndex
-#define Token LexToken
-#define Struct LexStruct
+#define Cursor       LexCursor
+#define Location     LexLocation
+#define TypeOptions  LexTypeOptions
+#define LType        LexType       // too generic
+#define TypeArray    LexTypeArray
+#define TypeIndex    LexTypeIndex
+#define StringView   LexStringView
+#define LToken       LexToken      // too generic
+#define SourceInfo   LexSourceInfo
+#define LResult      LexResult     // too generic
+#define predicate_fn lex_predicate_fn
+#define LRule        LexerRule     // too generic
+// #define ssize_t      lex_ssize_t // Could conflict with ssize_t from sys/types.h
 
 /// NO PREFIX FUNCTIONS
-#define init lex_init
-#define current lex_current
-#define consume lex_consume
-#define consume_any lex_consume_any
-#define skipn lex_skipn
-#define skip(l, id, match) lex_skip // This skip macro conflicts with skip flag from LexTypeOptions
-#define move_to lex_move_to
-#define move lex_move
-#define match_charsn lex_match_charsn
-#define match_chars lex_match_chars
-#define match_keywordn lex_match_keywordn
-#define match_keyword lex_match_keyword
-#define match_wrapped lex_match_wrapped
-#define match_exactn lex_match_exactn
-#define match_exact lex_match_exact
-#define match_region lex_match_region
-#define tkstr_tmp lex_tkstr_tmp
-#define tkstr_dup lex_tkstr_dup
-#define cursor_col lex_cursor_col
-#define cursor_line lex_cursor_line
-#define cursor_pos lex_cursor_pos
-#define cursor_pos_str lex_cursor_pos_str
-#define cursor_move lex_cursor_move
-//#define viewn lex_viewn // Too generic to be exported...
-//#define view lex_view // Too generic to be exported..
-#define view_src lex_view_src
-#define view_before lex_view_before
-#define view_at lex_view_at
-#define view_after lex_view_after
-#define view_dupstr lex_view_dupstr
-#define view_count lex_view_count
-#define view_eq lex_view_eq
-#define view_eq_cstr lex_view_eq_cstr
-#define view_chop lex_view_chop
-#define view_trim_left lex_view_trim_left
-#define view_trim_right lex_view_trim_right
-#define view_trim lex_view_trim
-#define view_empty lex_view_empty
-#define view_unwrap lex_view_unwrap
-#define print_hl lex_print_hl
-#define print_types lex_print_types
-#define print_profiler lex_print_profiler
+#define l_init             lex_init             // too generic
+#define l_current          lex_current          // too generic
+#define l_consume          lex_consume          // too generic
+#define consume_any        lex_consume_any
+#define skipn              lex_skipn
+#define skip(l, id, match) lex_skip(l, id, match)
+#define move_to            lex_move_to
+#define l_move             lex_move             // too generic
+#define has_next           lex_has_next
+#define match_charsn       lex_match_charsn
+#define match_chars        lex_match_chars
+#define match_keywordn     lex_match_keywordn
+#define match_keyword      lex_match_keyword
+#define match_wrapped      lex_match_wrapped
+#define match_exactn       lex_match_exactn
+#define match_exact        lex_match_exact
+#define match_region       lex_match_region
+#define match_while        lex_match_while
+#define tkstr_tmp          lex_tkstr_tmp
+#define tkstr_dup          lex_tkstr_dup
+#define cursor_reset       lex_cursor_reset
+#define l_loc              lex_loc // not too generic, but useful. So is better not to be exported
+#define cursor_line_bounds lex_cursor_line_bounds
+#define cursor_move        lex_cursor_move
+#define view_bounds        lex_view_bounds
+#define viewn              lex_viewn
+#define view               lex_view
+#define view_at_cursor     lex_view_at_cursor
+#define view_dupstr        lex_view_dupstr
+#define view_count         lex_view_count
+#define view_eq            lex_view_eq
+#define view_eq_cstr       lex_view_eq_cstr
+#define view_chop          lex_view_chop
+#define view_trim_left     lex_view_trim_left
+#define view_trim_right    lex_view_trim_right
+#define view_trim          lex_view_trim
+#define view_empty         lex_view_empty
+#define view_unwrap        lex_view_unwrap
+#define view_current_line  lex_view_current_line
+#define print_style        lex_print_style
+#define print_hl           lex_print_hl
+#define print_types        lex_print_types
+#define print_profiler     lex_print_profiler
+#define repl               lex_repl
 
 #ifndef LEX_DISABLE_BUILTIN_RULES
-  #define idchar lex_idchar
-  #define idchar_kebab lex_idchar_kebab
-  #define builtin_rule_ws lex_builtin_rule_ws
-  #define builtin_rule_id lex_builtin_rule_id
-  #define builtin_rule_id_kebab lex_builtin_rule_id_kebab
-  #define builtin_rule_dqstring lex_builtin_rule_dqstring
-  #define builtin_rule_sqstring lex_builtin_rule_sqstring
-  #define builtin_rule_string lex_builtin_rule_string
-  #define builtin_rule_pylike_comment lex_builtin_rule_pylike_comment
+  #define idchar                       lex_idchar
+  #define idchar_kebab                 lex_idchar_kebab
+  #define builtin_rule_ws              lex_builtin_rule_ws
+  #define builtin_rule_id              lex_builtin_rule_id
+  #define builtin_rule_id_kebab        lex_builtin_rule_id_kebab
+  #define builtin_rule_dqstring        lex_builtin_rule_dqstring
+  #define builtin_rule_sqstring        lex_builtin_rule_sqstring
+  #define builtin_rule_string          lex_builtin_rule_string
+  #define builtin_rule_pylike_comment  lex_builtin_rule_pylike_comment
   #define builtin_rule_asmlike_comment lex_builtin_rule_asmlike_comment
-  #define builtin_rule_clike_comment lex_builtin_rule_clike_comment
+  #define builtin_rule_clike_comment   lex_builtin_rule_clike_comment
   #define builtin_rule_clike_mlcomment lex_builtin_rule_clike_mlcomment
-#endif // LEX_DISABLE_BUILTIN_RULES
+#endif
 
-#define fatal lex_fatal
-#define read_file lex_read_file
+#define l_fatal     lex_fatal     // too generic
+#define l_read_file lex_read_file // too generic
 
 #endif // LEX_STRIP_PREFIX
 

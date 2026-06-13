@@ -44,28 +44,27 @@ int main() {
   };
 
   LexTypeArray tkmap = LEX_TYPEARRAY(tkdefs);
-  Lex l = lex_init(tkmap, 
+  Lex l = lex_init(tkmap, LEX_SRC("example.c",
     "// This is single line a comment\n"
     "int main() {\n\t"
       "print(\"Hello world\");\n\t"
       "return 0;\n"
     "} /* This comment \n can be multiline! */"
-  );  
+  ));  
 
   lex_print_hl(l, true);
 
   LexResult result;
   while (lex_current(&l, &result)) {
-    printf("(%2zu:%2zu) %-10s '%s'\n", lex_cursor_line(l.cursor), lex_cursor_col(l.cursor), lex_tkname(l, l.tk), lex_tkstr_tmp(l.tk));
+    LexLocation loc = lex_loc(l);
+    printf("(" LEX_LOCFMT ") %-10s '%s'\n",  lex_locarg(loc), lex_tkname(l, l.tk), lex_tkstr_tmp(l.tk));
     lex_move(&l);
   }
 
   if (result == LEX_INVALID_TOKEN) {
+    LexLocation loc = lex_loc(l);
     fprintf(stderr, 
-      "\e[31mErro: (%2zu:%2zu) '%s'\e[0m\n", 
-      lex_cursor_line(l.cursor), 
-      lex_cursor_col(l.cursor), 
-      lex_cursor_str(l.cursor)
+      "\e[31mErro: (" LEX_LOCFMT ") '" LEX_SVFMT "'\e[0m\n", lex_locarg(loc), lex_svarg(loc.line)
     );
 
     return 1;

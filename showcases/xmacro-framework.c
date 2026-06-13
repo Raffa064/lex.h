@@ -14,7 +14,7 @@
 LEX_XMACRO_FRAMEWORK(EXAMPLE, ExampleTypes, example_types);
 
 int main() {
-  Lex l = lex_init(LEX_TYPEARRAY(example_types), "this is an example");
+  Lex l = lex_init(LEX_TYPEARRAY(example_types), LEX_SRC(NULL, "this is an example"));
   lex_print_hl(l, true);
 }
 

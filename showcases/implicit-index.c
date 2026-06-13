@@ -25,7 +25,7 @@ LexType types[TYPE_COUNT] = {
 // LexType A = LEX_TYPE(TYPE_A, NULL);
 
 int main() {
-  Lex l = lex_init(LEX_TYPEARRAY(types), NULL);
+  Lex l = lex_init(LEX_TYPEARRAY(types), LEX_SRC(NULL, NULL));
 
   lex_print_types(l);  // TYPE_C TYPE_B TYPE_A 
 }
