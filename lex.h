@@ -1235,8 +1235,7 @@ LexStringView lex_view_unwrap(LexStringView sv, size_t offset) {
 LexStringView lex_view_current_line(Lex l) {
   size_t begin, end;
   lex_cursor_line_bounds(l.cursor, &begin, &end);
-
-  const char* content = l.src.content;
+  
   return lex_view_bounds(l.src.content, begin, end);
 }
 
