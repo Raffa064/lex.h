@@ -4,8 +4,6 @@
 #ifndef LEX_H
 #define LEX_H
 
-#define LEX_IMPLEMENTATION // TODO: remove this
-
 #define LEX_VERSION 4
 
 /*
