@@ -1117,8 +1117,8 @@ void lex_cursor_line_bounds(LexCursor cursor, size_t *start, size_t *end) {
   const char *src = cursor.source;
   while (start || end) {
     if (start) {
-      size_t look_behind = (*start) -1;
-      if (start == 0 || src[look_behind] == '\n')
+      size_t look_behind = (*start) - 1;
+      if (*start == 0 || src[look_behind] == '\n')
         start = NULL;
       else 
         (*start)--;
@@ -1233,7 +1233,7 @@ LexStringView lex_view_unwrap(LexStringView sv, size_t offset) {
 }
 
 LexStringView lex_view_current_line(Lex l) {
-  size_t begin, end;
+  size_t begin = 0, end = 0;
   lex_cursor_line_bounds(l.cursor, &begin, &end);
   
   return lex_view_bounds(l.src.content, begin, end);
