@@ -480,14 +480,14 @@ size_t lex_match_keyword(LexCursor cursor, const char* keyword);
 /*
  * Utilitary function for matching string-like structures.
  *
- * If 'can_be_scaped' is set, it will allows the occurrency of 'delimiter' inside the match 
+ * If 'can_be_escaped' is set, it will allows the occurrency of 'delimiter' inside the match 
  * if it's preceeded by '\'.
  *
  * For expanding for multiple lines, use 'multiline' option.
  *
  * If matched, returns the length of the match, otherwise LEX_NO_MATCH.
  */
-size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped, bool multiline);
+size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_escaped, bool multiline);
 
 /*
  * Utilitary function for matching a region that starts with some prefix, and ends with some suffix.
@@ -715,14 +715,14 @@ size_t lex_builtin_rule_id_kebab(LexCursor cursor);
 
 /*
  * Built-in rule for double quoted strings. (Ex: "Hello world" ) 
- * NOTE: It already handles scaped delimiters < \" >, but scaping the final string is not handled 
+ * NOTE: It already handles escaped delimiters < \" >, but scaping the final string is not handled 
  * by the library since the input source code is indent to be imutable.
  */
 LEX_INLINE size_t lex_builtin_rule_dqstring(LexCursor cursor);
 
 /*
  * Built-in rule for single quoted strings (Ex: 'Hello world' ). 
- * NOTE: It already handles scaped delimiters < \' >, but scaping the final string is not handled 
+ * NOTE: It already handles escaped delimiters < \' >, but scaping the final string is not handled 
  * by the library since the input source code is indent to be imutable.
  */
 LEX_INLINE size_t lex_builtin_rule_sqstring(LexCursor cursor);
@@ -730,7 +730,7 @@ LEX_INLINE size_t lex_builtin_rule_sqstring(LexCursor cursor);
 /*
  * Built-in rule for JavaScript/Python-like string, which can be both single/double 
  * quoted (Ex: "Hello world" or 'Hello world' ). 
- * NOTE: It already handles scaped delimiters < \" | \' >, but scaping the final string is not handled 
+ * NOTE: It already handles escaped delimiters < \" | \' >, but scaping the final string is not handled 
  * by the library since the input source code is indent to be imutable.
  */
 size_t lex_builtin_rule_string(LexCursor cursor);
@@ -981,27 +981,36 @@ size_t lex_match_keyword(LexCursor cursor, const char* keyword) {
   return lex_match_keywordn(cursor, keyword, strlen(keyword));
 }
 
-size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_scaped, bool multiline) {
-  const char *str = lex_cursor_str(cursor);
-  
-  if (str[0] == delimiter) {
-    for (size_t len = 1; str[len] != '\0'; len++) {
-      if (!multiline && str[len] == '\n') {
-        return LEX_NO_MATCH; // probably a broken match, like an unterminatted string
-      }
+size_t lex_match_wrapped(LexCursor cursor, const char delimiter, bool can_be_escaped, bool multiline) {
+  if (lex_cursor_ch(cursor) != delimiter)
+    return LEX_NO_MATCH;
 
-      if (str[len] == delimiter) {
-        if (can_be_scaped) {
-          if (str[len - 1] == '\\')  // ignore scaped delimiter
-            continue;
-        }
+  size_t len = 1;
+  size_t slash_counter = 0;
+  while (1) {
+    lex_cursor_move(&cursor, 1);
+    len++;
+    
+    char ch = lex_cursor_ch(cursor);
+    
+    // Check for unterminated strings:
+    if (ch == '\n' && !multiline) return LEX_NO_MATCH; 
+    if (ch == '\0') return LEX_NO_MATCH;
+    
+    if (can_be_escaped) {
+      size_t _slash_counter = slash_counter;
+      // Count consecutive back slashes. An odd amount of them means that current char is scaped.
+      if (ch == '\\') slash_counter++; else slash_counter = 0;
 
-        return len + 1; // following inclusive-exclusive convention
-      }
+      // Skip scaped delimiter
+      if ((_slash_counter % 2 != 0) && ch == delimiter) continue; 
     }
+
+    // Check if end of string was reached
+    if (ch == delimiter) break; 
   }
 
-  return LEX_NO_MATCH;
+  return len;
 }
 
 size_t lex_match_region(LexCursor cursor, const char* prefix, const char* suffix, bool optional_suffix, bool multiline) {
