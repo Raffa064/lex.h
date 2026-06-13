@@ -36,15 +36,15 @@ You can place this snippet on a `lex.c` file, so you just include the header whe
 A token type is defined by a `LexType` structure, which has 3 fields:
 
 - `name`: The name for the token type, useful for logging.
-- `rulefn`: A function pointer to the lexer rule that describes how to interpret tokens.
+- `rule`: A function pointer to the lexer rule that describes how to interpret tokens.
 - `options`: A `LexTypeOptions` object, with optional flags.
 
 Here is an example of manual initialization for this struct:
 ```c
 LexType comment = {
 	.name = "COMMENT",
-	.rulefn = your_rule,
-	.options.skip = true
+	.rule = your_rule,
+	.opt.skip = true
 };
 ```
 
@@ -70,7 +70,7 @@ Here is an example for a "unsigned integer" matching rule:
 
 ```c
 size_t uint_rule(LexCursor cursor) {
-  const char *start = curstr(cursor); // get start of the match as string
+  const char *start = lex_cursor_str(cursor); // get start of the match as string
 
   size_t len = LEX_NO_MATCH;
   for (; start[len] != '\0'; ++len) { // loop until the end of input
@@ -88,9 +88,9 @@ Now we know how to create a `LexType`, we need to define an array containing all
 enum {WS, COMMENT, STRING, TYPE_COUNT} OurTypes;
 
 LexType our_types[TYPE_COUNT] = {
-  LEX_ETYPE(WS,      lex_builtin_rules_ws, .skip = true),      // White Spaces
-  LEX_ETYPE(COMMENT, lex_builtin_clike_comment, .skip = true), // comments like this  
-  LEX_ETYPE(STRING,  lex_builtin_rules_dqstring),              // Double quoted string
+  LEX_ETYPE(WS,      lex_builtin_rule_ws,            .skip = true), // White Spaces
+  LEX_ETYPE(COMMENT, lex_builtin_rule_clike_comment, .skip = true), // comments like this  
+  LEX_ETYPE(STRING,  lex_builtin_rule_dqstring),                    // Double quoted string
   // ...
 } 
 ```
@@ -108,18 +108,16 @@ To solve this problem, we can determine that the enum is our source of truth, an
 enum {WS, COMMENT, STRING, TYPE_COUNT} OurTypes;
 
 LexType our_types[TYPE_COUNT] = {
-  LEX_TYPE(WS,      lex_builtin_rules_ws,      .skip = true), // White Spaces
-  LEX_TYPE(COMMENT, lex_builtin_clike_comment, .skip = true), // Comments like this one  
-  LEX_TYPE(STRING,  lex_builtin_rules_dqstring),              // Double quoted string
+  LEX_TYPE(WS,      lex_builtin_rule_ws,            .skip = true), // White Spaces
+  LEX_TYPE(COMMENT, lex_builtin_rule_clike_comment, .skip = true), // Comments like this one  
+  LEX_TYPE(STRING,  lex_builtin_rule_dqstring),                    // Double quoted string
   // ...
 } 
 ```
 
 This new macro one has the same functionality, but internally, it will add a **index designator**, which ensures the right index based on `OurTypes` values. For instance, it is same as:
 ```
-...
-[WS] = LEX_ETYPE(WS, lex_builtin_rules_ws, .skip = true),
-...
+[WS] = LEX_ETYPE(WS, lex_builtin_rule_ws, .skip = true),
 ```
 > That is way you cannot use it outside an LexType static array.
 
@@ -138,7 +136,7 @@ The macro expects `our_types` to be an static array, that can be both local or g
 We can now use this arr (or the inlined version of it) as the first argument for `lex_init`, which is the function responsible for initializing our lexer as a stack allocated `Lex` object.
 
 ```c
-Lex lex = lex_init(LEX_TYPEARRAY(our_types), input);
+Lex lex = lex_init(LEX_TYPEARRAY(our_types), LEX_SRC(NULL, input));
 ```
 
 And there is! Our lexer is ready to tokenize the input source code, which is the second argument.
@@ -149,7 +147,7 @@ In our example, we have defined three types of token: WS and COMMENT which are f
 Let's create a small example input string, and print it using `lex_print_hl`.
 ```c
 const char *input = "// Hello\n\"I'm a string\"";
-Lex lex = lex_init(LEX_TYPEARRAY(our_types), input);
+Lex lex = lex_init(LEX_TYPEARRAY(our_types), LEX_SRC(NULL, input));
 
 // This cool utility function will print the `input` colorizing all different token types 
 lex_print_hl(lex, true);
@@ -161,8 +159,8 @@ So we can use `lex` to iterate over all the tokens inside our input. It is done 
 ```c
 LexResult result;
 while (lex_current(&lex, &result)) {
-	// consume token stored as "lex->tk"
-	printf("Reading token: %s\n", lex_tkname(lex->tk));
+	// consume token stored as "lex.tk"
+	printf("Reading token: %s\n", lex_tkname(lex, lex.tk));
 	lex_move(&lex);
 }
 ```
@@ -171,7 +169,8 @@ This loop will iterate over all the tokens, stopping only at the *End of File* (
 
 ```c
 if (result == LEX_INVALID_TOKEN) {
-  fprintf(stderr, "ERROR: Invalid token at %d:%d", lex_curline(lex), lex_curcol(lex));
+  LexLocation loc = lex_cursor_loc(lex.cursor);
+  fprintf(stderr, "ERROR: Invalid token at %zu:%zu", loc.row, loc.col);
 } else {
   // EOF
 }
@@ -200,14 +199,14 @@ This finishes our tutorial. For more information, the library is well documented
  - `LEX_USE_XMACRO`: Enables useful macros for using X-macro pattern.
  
 **Built-in rules**
-| Function name                   | Description                           | Valid examples                          |
-|---------------------------------|---------------------------------------|-----------------------------------------|
-|lex_builtin_rule_ws              | White space match                     | ` \n\t\b\0`, `  `                       |
-|lex_builtin_rule_id              | User-defined identifiers              | `x`, `foo`, `$_abc123`                  |
-|lex_builtin_rule_dqstring        | Double quoted strings                 | `"What is a \"pointer\"?"`              |
-|lex_builtin_rule_sqstring        | Single quoted strings                 | `'It\'s handling scapes'`               |
-|lex_builtin_rule_string          | Both double/single quoted string      | `"Hello \"world\"?"`, `'That\'s cool!'` |
-|lex_builtin_rule_pylike_comment  | Single line sharp comment             | `# Pythonic style`                      |
-|lex_builtin_rule_asmlike_comment | Single line semicolon comment         | `; Assembly comment`                    |
-|lex_builtin_rule_clike_comment   | Single line double-slash comment      | `// Double-dash comment`                |
-|lex_builtin_rule_clike_mlcomment | Multi-line c-like comment             | `/* This is a valid comment */`         |
+| Function name                    | Description                           | Valid examples                          |
+|----------------------------------|---------------------------------------|-----------------------------------------|
+| lex_builtin_rule_ws              | White space match                     | ` \n\t\b\0`, `  `                       |
+| lex_builtin_rule_id              | User-defined identifiers              | `x`, `foo`, `$_abc123`                  |
+| lex_builtin_rule_dqstring        | Double quoted strings                 | `"What is a \"pointer\"?"`              |
+| lex_builtin_rule_sqstring        | Single quoted strings                 | `'It\'s handling scapes'`               |
+| lex_builtin_rule_string          | Both double/single quoted string      | `"Hello \"world\"?"`, `'That\'s cool!'` |
+| lex_builtin_rule_pylike_comment  | Single line sharp comment             | `# Pythonic style`                      |
+| lex_builtin_rule_asmlike_comment | Single line semicolon comment         | `; Assembly comment`                    |
+| lex_builtin_rule_clike_comment   | Single line double-slash comment      | `// Double-dash comment`                |
+| lex_builtin_rule_clike_mlcomment | Multi-line c-like comment             | `/* This is a valid comment */`         |
